@@ -1,23 +1,53 @@
-use std::ptr;
-use std::sync::atomic::{AtomicPtr, Ordering};
+pub mod window;
+
+use crate::window::Window;
+use std::sync::OnceLock;
 use windows::Win32;
-use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CreateSolidBrush, EndPaint, FillRect, PAINTSTRUCT, SetBkMode, TRANSPARENT, TextOutW,
 };
-use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::WindowsAndMessaging::{CS_HREDRAW, CS_VREDRAW, CreateWindowExW, DefWindowProcW, DispatchMessageW, FindWindowExW, FindWindowW, GetMessageW, GetWindowRect, IDC_ARROW, LoadCursorW, MSG, PostQuitMessage, RegisterClassExW, SW_SHOW, SWP_NOACTIVATE, SetWindowPos, ShowWindow, TranslateMessage, WM_DESTROY, WM_PAINT, WNDCLASSEXW, WS_CHILD, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_VISIBLE, EVENT_OBJECT_LOCATIONCHANGE};
-use windows::core::w;
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent};
+use windows::Win32::UI::WindowsAndMessaging::{
+    DefWindowProcW, DispatchMessageW, EVENT_OBJECT_LOCATIONCHANGE, FindWindowExW, FindWindowW,
+    GetMessageW, GetWindowRect, MSG, PostQuitMessage, TranslateMessage, WM_DESTROY, WM_PAINT,
+};
+use windows::core::{w, PCWSTR};
 
 const WINDOW_WIDTH: i32 = 200;
+const WINDOW_CLASS_NAME: PCWSTR = w!("sys-stats");
 
-static OVERLAY_HWND: AtomicPtr<std::ffi::c_void> = AtomicPtr::new(ptr::null_mut());
+static WINDOW: OnceLock<Window> = OnceLock::new();
 
 fn main() {
-    if let Err(e) = create_overlay_window() {
-        eprintln!("Error: {:?}", e);
-        std::process::exit(1);
+    unsafe {
+        let taskbar_hwnd = get_taskbar_hwnd();
+
+        let window = Window::create(taskbar_hwnd, WINDOW_CLASS_NAME).expect("Can't create window");
+        WINDOW.set(window)
+            .expect("can't set window instance");
+
+        update_window_position();
+
+        let hook = SetWinEventHook(
+            EVENT_OBJECT_LOCATIONCHANGE,
+            EVENT_OBJECT_LOCATIONCHANGE,
+            None,
+            Some(win_event_proc),
+            0,
+            0,
+            0,
+        );
+
+        let mut msg = MSG::default();
+        while GetMessageW(&mut msg, None, 0, 0).into() {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+
+        if !hook.is_invalid() {
+            UnhookWinEvent(hook).ok();
+        }
     }
 }
 
@@ -100,23 +130,13 @@ unsafe fn get_stats_position(window_width: i32) -> (i32, i32, i32) {
     (window_x, window_y, window_height)
 }
 
-unsafe fn update_stats_position(hwnd: HWND) {
-    let (window_x, window_y, window_height) = get_stats_position(WINDOW_WIDTH);
-
-    SetWindowPos(
-        hwnd,
-        Some(Win32::UI::WindowsAndMessaging::HWND_TOP),
-        window_x,
-        window_y,
-        WINDOW_WIDTH,
-        window_height,
-        SWP_NOACTIVATE,
-    )
-    .expect("Can't change stats window position");
+unsafe fn update_window_position() {
+    let position = get_stats_position(WINDOW_WIDTH);
+    WINDOW.get().unwrap().update_position(position);
 }
 
 unsafe extern "system" fn win_event_proc(
-    _h_win_event_hook: windows::Win32::UI::Accessibility::HWINEVENTHOOK,
+    _h_win_event_hook: Win32::UI::Accessibility::HWINEVENTHOOK,
     event: u32,
     hwnd: HWND,
     _id_object: i32,
@@ -132,77 +152,6 @@ unsafe extern "system" fn win_event_proc(
     let tray_hwnd = get_tray_hwnd(taskbar_hwnd);
 
     if hwnd == tray_hwnd || hwnd == taskbar_hwnd {
-        update_stats_position(HWND(OVERLAY_HWND.load(Ordering::Relaxed) as *mut _));
+        update_window_position();
     }
-}
-
-fn create_overlay_window() -> windows::core::Result<()> {
-    unsafe {
-        let instance: HINSTANCE = GetModuleHandleW(None)?.into();
-        let class_name = w!("sys-stats");
-
-        let class = WNDCLASSEXW {
-            cbSize: size_of::<WNDCLASSEXW>() as u32,
-            style: CS_HREDRAW | CS_VREDRAW,
-            lpfnWndProc: Some(wnd_proc),
-            hInstance: instance,
-            hCursor: LoadCursorW(None, IDC_ARROW)?,
-            lpszClassName: class_name,
-            ..Default::default()
-        };
-
-        let registered_class = RegisterClassExW(&class);
-        if registered_class == 0 {
-            let error = windows::core::Error::from_thread();
-            if error.code().0 != 1410 {
-                return Err(error);
-            }
-        }
-
-        let taskbar_hwnd = get_taskbar_hwnd();
-        let (window_x, window_y, window_height) = get_stats_position(WINDOW_WIDTH);
-
-        let window_style = WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
-
-        let hwnd = CreateWindowExW(
-            window_style,
-            class_name,
-            w!("Overlay"),
-            WS_CHILD | WS_VISIBLE,
-            window_x,
-            window_y,
-            WINDOW_WIDTH,
-            window_height,
-            Some(taskbar_hwnd),
-            None,
-            Some(instance),
-            None,
-        )?;
-        OVERLAY_HWND.store(hwnd.0, Ordering::Relaxed);
-        update_stats_position(hwnd);
-
-        ShowWindow(hwnd, SW_SHOW);
-
-        let hook = SetWinEventHook(
-            EVENT_OBJECT_LOCATIONCHANGE,
-            EVENT_OBJECT_LOCATIONCHANGE,
-            None,
-            Some(win_event_proc),
-            0,
-            0,
-            0,
-        );
-
-        let mut msg = MSG::default();
-        while GetMessageW(&mut msg, None, 0, 0).into() {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-
-        if !hook.is_invalid() {
-            UnhookWinEvent(hook).ok();
-        }
-    }
-
-    Ok(())
 }
