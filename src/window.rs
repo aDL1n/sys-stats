@@ -2,18 +2,23 @@ use crate::{WINDOW_WIDTH, get_stats_position, wnd_proc};
 use windows::Win32;
 use windows::Win32::Foundation::{HINSTANCE, HWND};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::WindowsAndMessaging::{CS_HREDRAW, CS_VREDRAW, CreateWindowExW, IDC_ARROW, LoadCursorW, RegisterClassExW, SW_HIDE, SW_SHOW, SWP_NOACTIVATE, SetWindowPos, ShowWindow, WNDCLASSEXW, WNDCLASSW, WS_CHILD, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_VISIBLE, GWLP_USERDATA, SetWindowLongPtrW, GetWindowLongPtrW};
+use windows::Win32::UI::WindowsAndMessaging::{
+    CS_HREDRAW, CS_VREDRAW, CreateWindowExW, IDC_ARROW,
+    LoadCursorW, RegisterClassExW, SWP_NOACTIVATE, SW_HIDE, SW_SHOW,
+    SetWindowPos, ShowWindow, WNDCLASSEXW, WS_CHILD, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    WS_VISIBLE,
+};
 use windows::core::{PCWSTR, w};
 
 #[derive(Debug)]
-pub struct Window {
+pub struct TaskbarWindow {
     pub hwnd: HWND,
 }
 
-unsafe impl Sync for Window {}
-unsafe impl Send for Window {}
+unsafe impl Sync for TaskbarWindow {}
+unsafe impl Send for TaskbarWindow {}
 
-impl Window {
+impl TaskbarWindow {
     pub fn create(parent_hwnd: HWND, class_name: PCWSTR) -> windows::core::Result<Self> {
         unsafe {
             let instance: HINSTANCE = Self::create_h_instance();

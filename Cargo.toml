@@ -13,6 +13,8 @@ windows = {
         "Win32_Graphics_Gdi",
         "Win32_UI_WindowsAndMessaging",
         "Win32_System_LibraryLoader",
-        "Win32_UI_Accessibility"
+        "Win32_UI_Accessibility",
+        "Win32_System_SystemInformation"
     ]
 }
+sysinfo = "0.39"

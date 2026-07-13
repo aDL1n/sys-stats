@@ -1,30 +1,40 @@
+pub mod monitor;
 pub mod window;
 
-use crate::window::Window;
-use std::sync::OnceLock;
+use crate::monitor::{CpuMonitor, Monitor, MonitorStore};
+use crate::window::TaskbarWindow;
+use std::sync::{Mutex, OnceLock};
 use windows::Win32;
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    BeginPaint, CreateSolidBrush, EndPaint, FillRect, PAINTSTRUCT, SetBkMode, TRANSPARENT, TextOutW,
+    BeginPaint, CreateSolidBrush, EndPaint, FillRect, InvalidateRect, PAINTSTRUCT, SetBkMode,
+    TRANSPARENT, TextOutW,
 };
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
     DefWindowProcW, DispatchMessageW, EVENT_OBJECT_LOCATIONCHANGE, FindWindowExW, FindWindowW,
-    GetMessageW, GetWindowRect, MSG, PostQuitMessage, TranslateMessage, WM_DESTROY, WM_PAINT,
+    GetMessageW, GetWindowRect, MSG, PostQuitMessage, SetTimer, TranslateMessage, WM_DESTROY,
+    WM_PAINT, WM_TIMER
 };
-use windows::core::{w, PCWSTR};
+use windows::core::{PCWSTR, w};
 
 const WINDOW_WIDTH: i32 = 200;
 const WINDOW_CLASS_NAME: PCWSTR = w!("sys-stats");
 
-static WINDOW: OnceLock<Window> = OnceLock::new();
+static TASKBAR_WINDOW: OnceLock<TaskbarWindow> = OnceLock::new();
+
+static MONITOR_STORE: OnceLock<Mutex<MonitorStore>> = OnceLock::new();
 
 fn main() {
     unsafe {
         let taskbar_hwnd = get_taskbar_hwnd();
 
-        let window = Window::create(taskbar_hwnd, WINDOW_CLASS_NAME).expect("Can't create window");
-        WINDOW.set(window)
+        let window =
+            TaskbarWindow::create(taskbar_hwnd, WINDOW_CLASS_NAME).expect("Can't create window");
+        SetTimer(Some(window.hwnd), 1, 500, None);
+
+        TASKBAR_WINDOW
+            .set(window)
             .expect("can't set window instance");
 
         update_window_position();
@@ -38,6 +48,11 @@ fn main() {
             0,
             0,
         );
+
+        let mut monitor_store = MonitorStore::new();
+        monitor_store.add_monitor(Box::new(CpuMonitor::new()));
+
+        MONITOR_STORE.set(Mutex::new(monitor_store));
 
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).into() {
@@ -58,8 +73,20 @@ unsafe extern "system" fn wnd_proc(
     lparam: LPARAM,
 ) -> LRESULT {
     unsafe {
-        println!("{}", msg);
         match msg {
+            WM_TIMER => {
+                if wparam.0 == 1 {
+                    if let Some(mutex) = MONITOR_STORE.get() {
+                        if let Ok(mut store) = mutex.lock() {
+                            store.update_all();
+                        }
+                    }
+
+                    InvalidateRect(Some(hwnd), None, true);
+                }
+                LRESULT(0)
+            }
+
             WM_PAINT => {
                 let mut ps = PAINTSTRUCT::default();
                 let hdc = BeginPaint(hwnd, &mut ps);
@@ -75,7 +102,15 @@ unsafe extern "system" fn wnd_proc(
 
                 SetBkMode(hdc, TRANSPARENT);
 
-                let _ = TextOutW(hdc, 10, y_center - 8, w!("Text 1").as_wide());
+                if let Some(mutex) = MONITOR_STORE.get() {
+                    if let Ok(mut store) = mutex.lock() {
+                        let value = store.get_monitor::<CpuMonitor>().unwrap().read();
+                        let string: Vec<u16> = format!("CPU {}", value as i32).encode_utf16().collect();
+
+                        TextOutW(hdc, 10, y_center - 8, string.as_slice());
+                    }
+                }
+
                 let _ = TextOutW(hdc, 70, 5, w!("Text 2").as_wide());
                 let _ = TextOutW(hdc, 130, 5, w!("Text 3").as_wide());
 
@@ -84,6 +119,10 @@ unsafe extern "system" fn wnd_proc(
             }
             WM_DESTROY => {
                 PostQuitMessage(0);
+                LRESULT(0)
+            }
+            1025 => {
+                InvalidateRect(Some(hwnd), None, true);
                 LRESULT(0)
             }
             _ => DefWindowProcW(hwnd, msg, wparam, lparam),
@@ -132,7 +171,7 @@ unsafe fn get_stats_position(window_width: i32) -> (i32, i32, i32) {
 
 unsafe fn update_window_position() {
     let position = get_stats_position(WINDOW_WIDTH);
-    WINDOW.get().unwrap().update_position(position);
+    TASKBAR_WINDOW.get().unwrap().update_position(position);
 }
 
 unsafe extern "system" fn win_event_proc(
