@@ -1,12 +1,10 @@
 use crate::{WINDOW_WIDTH, get_stats_position, wnd_proc};
-use windows::Win32;
 use windows::Win32::Foundation::{HINSTANCE, HWND};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::UI::Controls::MARGINS;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CS_HREDRAW, CS_VREDRAW, CreateWindowExW, IDC_ARROW,
-    LoadCursorW, RegisterClassExW, SWP_NOACTIVATE, SW_HIDE, SW_SHOW,
-    SetWindowPos, ShowWindow, WNDCLASSEXW, WS_CHILD, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
-    WS_VISIBLE,
+    CS_HREDRAW, CS_VREDRAW, CreateWindowExW, IDC_ARROW, LoadCursorW, RegisterClassExW, SW_HIDE,
+    SW_SHOW, ShowWindow, WNDCLASSEXW,
 };
 use windows::core::{PCWSTR, w};
 
@@ -64,14 +62,23 @@ impl TaskbarWindow {
         parent_hwnd: HWND,
         instance: HINSTANCE,
     ) -> windows::core::Result<HWND> {
-        let window_style = WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+        use windows::Win32::Foundation::COLORREF;
+        use windows::Win32::Graphics::Dwm::DwmExtendFrameIntoClientArea;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            LWA_ALPHA, SetLayeredWindowAttributes, WS_EX_LAYERED, WS_EX_NOACTIVATE,
+            WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP, WS_VISIBLE,
+        };
+
+        let window_style =
+            WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOPMOST;
+
         let (window_x, window_y, window_height) = get_stats_position(WINDOW_WIDTH);
 
-        CreateWindowExW(
+        let hwnd = CreateWindowExW(
             window_style,
             class_name,
             w!("Overlay"),
-            WS_CHILD | WS_VISIBLE,
+            WS_POPUP | WS_VISIBLE,
             window_x,
             window_y,
             WINDOW_WIDTH,
@@ -80,14 +87,28 @@ impl TaskbarWindow {
             None,
             Some(instance),
             None,
-        )
+        )?;
+
+        SetLayeredWindowAttributes(hwnd, COLORREF(0), 255, LWA_ALPHA).ok();
+
+        let margins = MARGINS {
+            cxLeftWidth: -1,
+            cxRightWidth: -1,
+            cyTopHeight: -1,
+            cyBottomHeight: -1,
+        };
+        DwmExtendFrameIntoClientArea(hwnd, &margins).ok();
+
+        Ok(hwnd)
     }
 
     pub fn update_position(&self, position: (i32, i32, i32)) {
+        use windows::Win32::UI::WindowsAndMessaging::{HWND_TOPMOST, SWP_NOACTIVATE, SetWindowPos};
+
         unsafe {
             SetWindowPos(
                 self.hwnd,
-                Some(Win32::UI::WindowsAndMessaging::HWND_TOP),
+                Some(HWND_TOPMOST),
                 position.0,
                 position.1,
                 WINDOW_WIDTH,

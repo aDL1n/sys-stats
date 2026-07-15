@@ -1,20 +1,19 @@
-use crate::monitor::cpu::CpuMonitor;
 use crate::monitor::Monitor;
-use crate::util;
+use crate::monitor::ram::RamMonitor;
 use crate::util::ByteString;
 use crate::widget::{Position, Size, Widget, WidgetRenderContext};
-use windows::Win32::Graphics::Direct2D::Common::D2D1_COLOR_F;
+use windows::Win32::Graphics::Direct2D::Common::{D2D1_COLOR_F, D2D_RECT_F};
 use windows::Win32::Graphics::{Direct2D, DirectWrite};
 use windows::core::w;
 
-pub struct CpuWidget {
+pub struct RamWidget {
     size: Size,
 }
 
-impl CpuWidget {
+impl RamWidget {
     pub(crate) fn new() -> Box<Self> {
         let size = Size {
-            width: 30,
+            width: 50,
             height: 30,
         };
 
@@ -22,7 +21,7 @@ impl CpuWidget {
     }
 }
 
-impl Widget for CpuWidget {
+impl Widget for RamWidget {
     fn draw(&self, context: WidgetRenderContext, position: Position) {
         unsafe {
             let render_target = context.render_target;
@@ -41,8 +40,8 @@ impl Widget for CpuWidget {
                 )
                 .unwrap();
 
-            let value = monitor_store.get_monitor::<CpuMonitor>().unwrap().read();
-            let value: ByteString = ByteString::from(format!("CPU\n{}%", value as i32));
+            let value = monitor_store.get_monitor::<RamMonitor>().unwrap().read();
+            let value: ByteString = ByteString::from(format!("RAM\n{:.2}GB", value));
 
             let value_text_format = write_factory
                 .CreateTextFormat(
@@ -56,7 +55,7 @@ impl Widget for CpuWidget {
                 )
                 .unwrap();
 
-            let rect= util::rectangle(&self.size, &position);
+            let rect= rectangle(&self.size, &position);
 
             render_target.DrawText(
                 value.get_utf16(),
@@ -74,4 +73,11 @@ impl Widget for CpuWidget {
     }
 }
 
-
+fn rectangle(size: &Size, position: &Position) -> D2D_RECT_F {
+    D2D_RECT_F {
+        left: position.x as f32,
+        top: (size.height + position.y) as f32,
+        right: (size.width + position.x) as f32,
+        bottom: position.y as f32,
+    }
+}

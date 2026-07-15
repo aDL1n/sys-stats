@@ -6,25 +6,33 @@ pub mod window;
 
 use crate::monitor::MonitorStore;
 use crate::monitor::cpu::CpuMonitor;
+use crate::monitor::ram::RamMonitor;
 use crate::widget::WidgetStore;
 use crate::widget::cpu::CpuWidget;
+use crate::widget::ram::RamWidget;
 use crate::window::TaskbarWindow;
-use std::sync::{Mutex, OnceLock};
+use std::cell::RefCell;
+use std::sync::OnceLock;
 use windows::Win32;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi;
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent};
-use windows::Win32::UI::WindowsAndMessaging::{DefWindowProcW, DispatchMessageW, FindWindowExW, FindWindowW, GetMessageW, GetWindowRect, PostQuitMessage, SetTimer, TranslateMessage, EVENT_OBJECT_LOCATIONCHANGE, HTTRANSPARENT, MSG, WM_DESTROY, WM_PAINT, WM_TIMER, WM_NCHITTEST};
+use windows::Win32::UI::WindowsAndMessaging::{
+    DefWindowProcW, DispatchMessageW, EVENT_OBJECT_LOCATIONCHANGE, FindWindowExW, FindWindowW,
+    GetMessageW, GetWindowRect, HTTRANSPARENT, MSG, PostQuitMessage, SetTimer, TranslateMessage,
+    WM_DESTROY, WM_NCHITTEST, WM_PAINT, WM_TIMER,
+};
 use windows::core::{PCWSTR, w};
 
-const WINDOW_WIDTH: i32 = 200;
+const WINDOW_WIDTH: i32 = 100;
 const WINDOW_CLASS_NAME: PCWSTR = w!("sys-stats");
 
-static STATS_WINDOW: OnceLock<TaskbarWindow> = OnceLock::new();
-
-static MONITOR_STORE: OnceLock<Mutex<MonitorStore>> = OnceLock::new();
-static WIDGET_STORE: OnceLock<WidgetStore> = OnceLock::new();
+thread_local! {
+    static STATS_WINDOW: OnceLock<TaskbarWindow> = OnceLock::new();
+    static MONITOR_STORE: RefCell<MonitorStore> = RefCell::new(MonitorStore::new());
+    static WIDGET_STORE: RefCell<WidgetStore> = RefCell::new(WidgetStore::new());
+}
 
 fn main() {
     unsafe {
@@ -32,21 +40,23 @@ fn main() {
 
         let taskbar_hwnd = get_taskbar_hwnd();
 
-        let mut widget_store = WidgetStore::default();
-        widget_store.add_widget(CpuWidget::new());
+        WIDGET_STORE.with_borrow_mut(|store| {
+            store.add_widget(CpuWidget::new());
+            store.add_widget(RamWidget::new());
+        });
 
-        WIDGET_STORE.set(widget_store);
+        MONITOR_STORE.with_borrow_mut(|store| {
+            store.add_monitor(Box::new(CpuMonitor::new()));
+            store.add_monitor(Box::new(RamMonitor::new()));
+        });
 
-        let mut monitor_store = MonitorStore::new();
-        monitor_store.add_monitor(Box::new(CpuMonitor::new()));
+        STATS_WINDOW.with(|lock| {
+            let window = TaskbarWindow::create(taskbar_hwnd, WINDOW_CLASS_NAME)
+                .expect("Can't create window");
+            SetTimer(Some(window.hwnd), 1, 500, None);
 
-        MONITOR_STORE.set(Mutex::new(monitor_store));
-
-        let window =
-            TaskbarWindow::create(taskbar_hwnd, WINDOW_CLASS_NAME).expect("Can't create window");
-        SetTimer(Some(window.hwnd), 1, 500, None);
-
-        STATS_WINDOW.set(window).expect("can't set window instance");
+            lock.set(window).expect("can't set window instance");
+        });
 
         let hook = SetWinEventHook(
             EVENT_OBJECT_LOCATIONCHANGE,
@@ -79,20 +89,17 @@ unsafe extern "system" fn wnd_proc(
     unsafe {
         match msg {
             WM_TIMER => {
-                if wparam.0 == 1
-                    && let Some(mutex) = MONITOR_STORE.get()
-                    && let Ok(mut store) = mutex.lock()
-                {
-                    store.update_all();
+                if wparam.0 == 1 {
+                    MONITOR_STORE.with_borrow_mut(|store| {
+                        store.update_all();
+                    })
                 }
 
                 Gdi::InvalidateRect(Some(hwnd), None, false);
 
                 LRESULT(0)
             }
-            WM_NCHITTEST => {
-                LRESULT(HTTRANSPARENT as isize)
-            }
+            WM_NCHITTEST => LRESULT(HTTRANSPARENT as isize),
             WM_PAINT => {
                 let mut ps = Gdi::PAINTSTRUCT::default();
                 Gdi::BeginPaint(hwnd, &mut ps);
@@ -154,7 +161,9 @@ unsafe fn get_stats_position(window_width: i32) -> (i32, i32, i32) {
 
 unsafe fn update_window_position() {
     let position = get_stats_position(WINDOW_WIDTH);
-    STATS_WINDOW.get().unwrap().update_position(position);
+    STATS_WINDOW.with(|lock| {
+        lock.get().unwrap().update_position(position);
+    })
 }
 
 unsafe extern "system" fn win_event_proc(

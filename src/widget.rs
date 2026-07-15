@@ -1,22 +1,20 @@
 use crate::monitor::MonitorStore;
-use windows::Win32::Graphics::Direct2D::Common::{D2D1_COLOR_F, D2D_RECT_F};
+use crate::util::{Position, Size};
+use windows::Win32::Graphics::Direct2D::Common::{D2D_RECT_F, D2D1_COLOR_F};
 use windows::Win32::Graphics::Direct2D::ID2D1HwndRenderTarget;
 use windows::Win32::Graphics::DirectWrite::IDWriteFactory;
+
 pub mod cpu;
+pub mod ram;
 
 pub trait Widget {
-    fn draw(
-        &self,
-        render_target: &ID2D1HwndRenderTarget,
-        write_factory: &IDWriteFactory,
-        monitor_store: &MonitorStore,
-    );
+    fn draw(&self, context: WidgetRenderContext, position: Position);
 
     fn size(&self) -> &Size;
 }
 
 pub struct WidgetStore {
-    widgets: Vec<Box<dyn Widget + Send + Sync>>,
+    widgets: Vec<Box<dyn Widget>>,
 }
 
 impl Default for WidgetStore {
@@ -30,56 +28,49 @@ impl WidgetStore {
         Self { widgets: vec![] }
     }
 
-    pub fn add_widget(&mut self, widget: Box<dyn Widget + Send + Sync>) {
+    pub fn add_widget(&mut self, widget: Box<dyn Widget>) {
         self.widgets.push(widget);
     }
 
-    pub fn draw_all(
+    pub fn get_widgets(&self) -> &Vec<Box<dyn Widget>> {
+        &self.widgets
+    }
+}
+
+struct WidgetRenderContext<'a> {
+    render_target: &'a ID2D1HwndRenderTarget,
+    write_factory: &'a IDWriteFactory,
+    monitor_store: &'a MonitorStore,
+}
+
+pub struct WidgetRenderer {}
+
+impl WidgetRenderer {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub fn render(
         &self,
+        widgets: &Vec<Box<dyn Widget>>,
         render_target: &ID2D1HwndRenderTarget,
         write_factory: &IDWriteFactory,
-        store: &MonitorStore,
+        monitor_store: &MonitorStore,
     ) {
-        unsafe {
-            let brush = render_target.CreateSolidColorBrush(
-                &D2D1_COLOR_F { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
-                None
-            ).unwrap();
+        let mut offset_x = 0;
+        let margin = 10;
 
-            let mut current_x = 0.0;
-            let margin = 10.0;
+        for widget in widgets {
+            let widget_context = WidgetRenderContext {
+                render_target,
+                write_factory,
+                monitor_store,
+            };
+            let widget_position = Position::new(offset_x, 0);
 
-            for widget in &self.widgets {
-                let width = widget.size().width() as f32;
-                let height = widget.size().height() as f32;
+            widget.draw(widget_context, widget_position);
 
-                let rect = D2D_RECT_F {
-                    left: current_x,
-                    top: 0.0,
-                    right: current_x + width,
-                    bottom: height,
-                };
-
-                widget.draw(render_target, write_factory, store);
-
-                render_target.DrawRectangle(&rect, &brush, 1.0, None);
-                current_x += width + margin;
-            }
+            offset_x += widget.size().width + margin;
         }
-    }
-}
-
-pub struct Size {
-    width: u16,
-    height: u16,
-}
-
-impl Size {
-    pub fn height(&self) -> u16 {
-        self.height
-    }
-
-    pub fn width(&self) -> u16 {
-        self.width
     }
 }

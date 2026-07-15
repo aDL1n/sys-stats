@@ -1,4 +1,5 @@
 pub mod cpu;
+pub mod ram;
 
 use std::any::Any;
 
