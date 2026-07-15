@@ -1,43 +1,56 @@
 pub mod monitor;
 pub mod window;
+pub mod widget;
+mod util;
+mod render;
 
-use crate::monitor::{CpuMonitor, Monitor, MonitorStore};
+use crate::monitor::MonitorStore;
+use crate::monitor::cpu::CpuMonitor;
+use crate::widget::WidgetStore;
+use crate::widget::cpu::CpuWidget;
 use crate::window::TaskbarWindow;
 use std::sync::{Mutex, OnceLock};
 use windows::Win32;
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
-use windows::Win32::Graphics::Gdi::{
-    BeginPaint, CreateSolidBrush, EndPaint, FillRect, InvalidateRect, PAINTSTRUCT, SetBkMode,
-    TRANSPARENT, TextOutW,
-};
+use windows::Win32::Graphics::Gdi;
+use windows::Win32::Graphics::Gdi::{HBRUSH, HDC, PAINTSTRUCT, TRANSPARENT};
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
     DefWindowProcW, DispatchMessageW, EVENT_OBJECT_LOCATIONCHANGE, FindWindowExW, FindWindowW,
     GetMessageW, GetWindowRect, MSG, PostQuitMessage, SetTimer, TranslateMessage, WM_DESTROY,
-    WM_PAINT, WM_TIMER
+    WM_PAINT, WM_TIMER,
 };
 use windows::core::{PCWSTR, w};
 
 const WINDOW_WIDTH: i32 = 200;
 const WINDOW_CLASS_NAME: PCWSTR = w!("sys-stats");
 
-static TASKBAR_WINDOW: OnceLock<TaskbarWindow> = OnceLock::new();
+static STATS_WINDOW: OnceLock<TaskbarWindow> = OnceLock::new();
 
 static MONITOR_STORE: OnceLock<Mutex<MonitorStore>> = OnceLock::new();
+static WIDGET_STORE: OnceLock<WidgetStore> = OnceLock::new();
 
 fn main() {
     unsafe {
         let taskbar_hwnd = get_taskbar_hwnd();
 
-        let window =
-            TaskbarWindow::create(taskbar_hwnd, WINDOW_CLASS_NAME).expect("Can't create window");
+        let mut widget_store = WidgetStore::new();
+        widget_store.add_widget(CpuWidget::new());
+
+        WIDGET_STORE.set(widget_store);
+
+        let mut monitor_store = MonitorStore::new();
+        monitor_store.add_monitor(Box::new(CpuMonitor::new()));
+
+        MONITOR_STORE.set(Mutex::new(monitor_store));
+
+        let window = TaskbarWindow::create(taskbar_hwnd, WINDOW_CLASS_NAME)
+            .expect("Can't create window");
         SetTimer(Some(window.hwnd), 1, 500, None);
 
-        TASKBAR_WINDOW
+        STATS_WINDOW
             .set(window)
             .expect("can't set window instance");
-
-        update_window_position();
 
         let hook = SetWinEventHook(
             EVENT_OBJECT_LOCATIONCHANGE,
@@ -48,11 +61,6 @@ fn main() {
             0,
             0,
         );
-
-        let mut monitor_store = MonitorStore::new();
-        monitor_store.add_monitor(Box::new(CpuMonitor::new()));
-
-        MONITOR_STORE.set(Mutex::new(monitor_store));
 
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).into() {
@@ -82,52 +90,60 @@ unsafe extern "system" fn wnd_proc(
                         }
                     }
 
-                    InvalidateRect(Some(hwnd), None, true);
+                    Gdi::InvalidateRect(Some(hwnd), None, true);
                 }
                 LRESULT(0)
             }
 
             WM_PAINT => {
                 let mut ps = PAINTSTRUCT::default();
-                let hdc = BeginPaint(hwnd, &mut ps);
+                unsafe {
+                    let hdc = Gdi::BeginPaint(hwnd, &mut ps);
 
-                let mut rect = RECT::default();
-                Win32::UI::WindowsAndMessaging::GetClientRect(hwnd, &mut rect);
+                    let mut rect = RECT::default();
+                    Win32::UI::WindowsAndMessaging::GetClientRect(hwnd, &mut rect);
 
-                let y_center = (rect.bottom - rect.top) / 2;
+                    let width = rect.right - rect.left;
+                    let height = rect.bottom - rect.top;
 
-                let bg_brush = CreateSolidBrush(COLORREF(0xffffff));
-                FillRect(hdc, &rect, bg_brush);
-                let _ = Win32::Graphics::Gdi::DeleteObject(bg_brush.into());
+                    let buffer = Gdi::CreateCompatibleDC(Some(hdc));
+                    let buffer_bitmap = Gdi::CreateCompatibleBitmap(hdc, width, height);
+                    let old_buffer_bitmap = Gdi::SelectObject(buffer, buffer_bitmap.into());
 
-                SetBkMode(hdc, TRANSPARENT);
+                    Gdi::SetBkMode(buffer, TRANSPARENT);
+                    Gdi::SetTextColor(buffer, COLORREF(0x00FFFFFF));
 
-                if let Some(mutex) = MONITOR_STORE.get() {
-                    if let Ok(mut store) = mutex.lock() {
-                        let value = store.get_monitor::<CpuMonitor>().unwrap().read();
-                        let string: Vec<u16> = format!("CPU {}", value as i32).encode_utf16().collect();
+                    paint(buffer, rect);
 
-                        TextOutW(hdc, 10, y_center - 8, string.as_slice());
-                    }
+                    Gdi::BitBlt(hdc, 0, 0, width, height, Some(buffer), 0, 0, Gdi::SRCCOPY);
+
+                    Gdi::SelectObject(buffer, old_buffer_bitmap);
+                    Gdi::DeleteObject(buffer_bitmap.into());
+                    Gdi::DeleteDC(buffer);
+
+                    Gdi::EndPaint(hwnd, &ps);
                 }
-
-                let _ = TextOutW(hdc, 70, 5, w!("Text 2").as_wide());
-                let _ = TextOutW(hdc, 130, 5, w!("Text 3").as_wide());
-
-                EndPaint(hwnd, &ps);
                 LRESULT(0)
             }
             WM_DESTROY => {
                 PostQuitMessage(0);
                 LRESULT(0)
             }
-            1025 => {
-                InvalidateRect(Some(hwnd), None, true);
-                LRESULT(0)
-            }
             _ => DefWindowProcW(hwnd, msg, wparam, lparam),
         }
     }
+}
+
+unsafe fn paint(hdc: HDC, rect: RECT) {
+    if let Some(mutex) = MONITOR_STORE.get() {
+        if let Ok(store) = mutex.lock() {
+            if let Some(widgets) = WIDGET_STORE.get() {
+                widgets.draw_all(hdc, &store);
+            }
+        }
+    }
+
+    Gdi::FrameRect(hdc, &rect, HBRUSH::default());
 }
 
 fn get_taskbar_rectangle() -> RECT {
@@ -171,7 +187,7 @@ unsafe fn get_stats_position(window_width: i32) -> (i32, i32, i32) {
 
 unsafe fn update_window_position() {
     let position = get_stats_position(WINDOW_WIDTH);
-    TASKBAR_WINDOW.get().unwrap().update_position(position);
+    STATS_WINDOW.get().unwrap().update_position(position);
 }
 
 unsafe extern "system" fn win_event_proc(
