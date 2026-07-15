@@ -150,10 +150,8 @@ unsafe fn get_stats_position(window_width: i32) -> (i32, i32, i32) {
     let mut tray_rectangle = RECT::default();
     GetWindowRect(tray_hwnd, &mut tray_rectangle).expect("Can't get tray rectangle");
 
-    let tray_x = tray_rectangle.left - taskbar_rectangle.left;
-
-    let window_x = tray_x - window_width - 10;
-    let window_y = 0;
+    let window_x = tray_rectangle.left - window_width;
+    let window_y = taskbar_rectangle.top;
     let window_height = taskbar_rectangle.bottom - taskbar_rectangle.top;
 
     (window_x, window_y, window_height)
@@ -162,8 +160,10 @@ unsafe fn get_stats_position(window_width: i32) -> (i32, i32, i32) {
 unsafe fn update_window_position() {
     let position = get_stats_position(WINDOW_WIDTH);
     STATS_WINDOW.with(|lock| {
-        lock.get().unwrap().update_position(position);
-    })
+        if let Some(window) = lock.get() {
+            window.update_position(position);
+        }
+    });
 }
 
 unsafe extern "system" fn win_event_proc(
