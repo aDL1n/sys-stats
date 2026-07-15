@@ -7,14 +7,18 @@ edition = "2024"
 windows = {
     version = "0.62",
     features = [
-        "Win32_UI_Shell",
-        "Win32_System_Com",
         "Win32_Foundation",
-        "Win32_Graphics_Gdi",
         "Win32_UI_WindowsAndMessaging",
         "Win32_System_LibraryLoader",
         "Win32_UI_Accessibility",
-        "Win32_System_SystemInformation"
+        "Win32_System_Com",
+
+        # render
+        "Win32_Graphics_Direct2D",
+        "Win32_Graphics_DirectWrite",
+        "Win32_Graphics_Direct2D_Common",
+        "Win32_Graphics_Dxgi_Common",
+        "Win32_Graphics_Gdi"
     ]
 }
 sysinfo = "0.39"

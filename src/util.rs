@@ -5,7 +5,7 @@ impl ByteString {
         ByteString(string.encode_utf16().collect())
     }
 
-    pub fn get_bytes(&self) -> &[u16] {
+    pub fn get_utf16(&self) -> &[u16] {
         self.0.as_slice()
     }
 }

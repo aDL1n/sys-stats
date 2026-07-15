@@ -1,8 +1,8 @@
 pub mod monitor;
-pub mod window;
-pub mod widget;
+pub mod render;
 mod util;
-mod render;
+pub mod widget;
+pub mod window;
 
 use crate::monitor::MonitorStore;
 use crate::monitor::cpu::CpuMonitor;
@@ -11,15 +11,11 @@ use crate::widget::cpu::CpuWidget;
 use crate::window::TaskbarWindow;
 use std::sync::{Mutex, OnceLock};
 use windows::Win32;
-use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi;
-use windows::Win32::Graphics::Gdi::{HBRUSH, HDC, PAINTSTRUCT, TRANSPARENT};
+use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent};
-use windows::Win32::UI::WindowsAndMessaging::{
-    DefWindowProcW, DispatchMessageW, EVENT_OBJECT_LOCATIONCHANGE, FindWindowExW, FindWindowW,
-    GetMessageW, GetWindowRect, MSG, PostQuitMessage, SetTimer, TranslateMessage, WM_DESTROY,
-    WM_PAINT, WM_TIMER,
-};
+use windows::Win32::UI::WindowsAndMessaging::{DefWindowProcW, DispatchMessageW, FindWindowExW, FindWindowW, GetMessageW, GetWindowRect, PostQuitMessage, SetTimer, TranslateMessage, EVENT_OBJECT_LOCATIONCHANGE, HTTRANSPARENT, MSG, WM_DESTROY, WM_PAINT, WM_TIMER, WM_NCHITTEST};
 use windows::core::{PCWSTR, w};
 
 const WINDOW_WIDTH: i32 = 200;
@@ -32,9 +28,11 @@ static WIDGET_STORE: OnceLock<WidgetStore> = OnceLock::new();
 
 fn main() {
     unsafe {
+        CoInitializeEx(None, COINIT_MULTITHREADED).unwrap();
+
         let taskbar_hwnd = get_taskbar_hwnd();
 
-        let mut widget_store = WidgetStore::new();
+        let mut widget_store = WidgetStore::default();
         widget_store.add_widget(CpuWidget::new());
 
         WIDGET_STORE.set(widget_store);
@@ -44,13 +42,11 @@ fn main() {
 
         MONITOR_STORE.set(Mutex::new(monitor_store));
 
-        let window = TaskbarWindow::create(taskbar_hwnd, WINDOW_CLASS_NAME)
-            .expect("Can't create window");
+        let window =
+            TaskbarWindow::create(taskbar_hwnd, WINDOW_CLASS_NAME).expect("Can't create window");
         SetTimer(Some(window.hwnd), 1, 500, None);
 
-        STATS_WINDOW
-            .set(window)
-            .expect("can't set window instance");
+        STATS_WINDOW.set(window).expect("can't set window instance");
 
         let hook = SetWinEventHook(
             EVENT_OBJECT_LOCATIONCHANGE,
@@ -83,46 +79,29 @@ unsafe extern "system" fn wnd_proc(
     unsafe {
         match msg {
             WM_TIMER => {
-                if wparam.0 == 1 {
-                    if let Some(mutex) = MONITOR_STORE.get() {
-                        if let Ok(mut store) = mutex.lock() {
-                            store.update_all();
-                        }
-                    }
-
-                    Gdi::InvalidateRect(Some(hwnd), None, true);
+                if wparam.0 == 1
+                    && let Some(mutex) = MONITOR_STORE.get()
+                    && let Ok(mut store) = mutex.lock()
+                {
+                    store.update_all();
                 }
+
+                Gdi::InvalidateRect(Some(hwnd), None, false);
+
                 LRESULT(0)
             }
-
+            WM_NCHITTEST => {
+                LRESULT(HTTRANSPARENT as isize)
+            }
             WM_PAINT => {
-                let mut ps = PAINTSTRUCT::default();
-                unsafe {
-                    let hdc = Gdi::BeginPaint(hwnd, &mut ps);
+                let mut ps = Gdi::PAINTSTRUCT::default();
+                Gdi::BeginPaint(hwnd, &mut ps);
 
-                    let mut rect = RECT::default();
-                    Win32::UI::WindowsAndMessaging::GetClientRect(hwnd, &mut rect);
+                render::draw_window(hwnd);
 
-                    let width = rect.right - rect.left;
-                    let height = rect.bottom - rect.top;
+                Gdi::ValidateRect(Some(hwnd), None);
+                Gdi::EndPaint(hwnd, &ps);
 
-                    let buffer = Gdi::CreateCompatibleDC(Some(hdc));
-                    let buffer_bitmap = Gdi::CreateCompatibleBitmap(hdc, width, height);
-                    let old_buffer_bitmap = Gdi::SelectObject(buffer, buffer_bitmap.into());
-
-                    Gdi::SetBkMode(buffer, TRANSPARENT);
-                    Gdi::SetTextColor(buffer, COLORREF(0x00FFFFFF));
-
-                    paint(buffer, rect);
-
-                    Gdi::BitBlt(hdc, 0, 0, width, height, Some(buffer), 0, 0, Gdi::SRCCOPY);
-
-                    Gdi::SelectObject(buffer, old_buffer_bitmap);
-                    Gdi::DeleteObject(buffer_bitmap.into());
-                    Gdi::DeleteDC(buffer);
-
-                    Gdi::EndPaint(hwnd, &ps);
-                }
                 LRESULT(0)
             }
             WM_DESTROY => {
@@ -132,18 +111,6 @@ unsafe extern "system" fn wnd_proc(
             _ => DefWindowProcW(hwnd, msg, wparam, lparam),
         }
     }
-}
-
-unsafe fn paint(hdc: HDC, rect: RECT) {
-    if let Some(mutex) = MONITOR_STORE.get() {
-        if let Ok(store) = mutex.lock() {
-            if let Some(widgets) = WIDGET_STORE.get() {
-                widgets.draw_all(hdc, &store);
-            }
-        }
-    }
-
-    Gdi::FrameRect(hdc, &rect, HBRUSH::default());
 }
 
 fn get_taskbar_rectangle() -> RECT {
