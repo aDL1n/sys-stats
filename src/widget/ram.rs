@@ -1,11 +1,10 @@
 use crate::monitor::Monitor;
 use crate::monitor::ram::RamMonitor;
+use crate::util;
 use crate::util::ByteString;
-use crate::widget::{Position, Size, Widget, WidgetRenderContext};
-use windows::Win32::Graphics::Direct2D::Common::{D2D1_COLOR_F, D2D_RECT_F};
+use crate::widget::{Position, Widget, WidgetRenderContext};
 use windows::Win32::Graphics::{Direct2D, DirectWrite};
 use windows::core::w;
-use crate::util;
 
 pub struct RamWidget {
     width: u16,
@@ -20,23 +19,11 @@ impl RamWidget {
 }
 
 impl Widget for RamWidget {
-    fn draw(&self, context: WidgetRenderContext, position: Position, height: u16) {
+    fn draw(&self, context: &WidgetRenderContext, position: Position, height: u16) {
         unsafe {
             let render_target = context.render_target;
             let write_factory = context.write_factory;
             let monitor_store = context.monitor_store;
-
-            let brush = render_target
-                .CreateSolidColorBrush(
-                    &D2D1_COLOR_F {
-                        r: 1.0,
-                        g: 1.0,
-                        b: 1.0,
-                        a: 1.0,
-                    },
-                    None,
-                )
-                .unwrap();
 
             let value = monitor_store.get_monitor::<RamMonitor>().unwrap().read();
             let value: ByteString = ByteString::from(format!("RAM\n{:.2}GB", value));
@@ -59,7 +46,7 @@ impl Widget for RamWidget {
                 value.get_utf16(),
                 &value_text_format,
                 &rect,
-                &brush,
+                context.text_brush,
                 Direct2D::D2D1_DRAW_TEXT_OPTIONS_NONE,
                 DirectWrite::DWRITE_MEASURING_MODE_NATURAL,
             );

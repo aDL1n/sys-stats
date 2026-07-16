@@ -13,7 +13,6 @@ windows = {
         "Win32_UI_Accessibility",
         "Win32_System_Com",
 
-        # render
         "Win32_Graphics_Direct2D",
         "Win32_Graphics_DirectWrite",
         "Win32_Graphics_Direct2D_Common",

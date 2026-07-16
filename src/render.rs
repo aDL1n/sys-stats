@@ -44,7 +44,12 @@ impl D2DRenderer {
         }
     }
 
-    unsafe fn get_render_target(&mut self, hwnd: HWND, width: u32, height: u32) -> &ID2D1HwndRenderTarget {
+    unsafe fn get_render_target(
+        &mut self,
+        hwnd: HWND,
+        width: u32,
+        height: u32,
+    ) -> &ID2D1HwndRenderTarget {
         if self.render_target.is_none() {
             let props = D2D1_RENDER_TARGET_PROPERTIES {
                 pixelFormat: D2D1_PIXEL_FORMAT {

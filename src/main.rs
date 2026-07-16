@@ -22,9 +22,11 @@ use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
     DefWindowProcW, DispatchMessageW, EVENT_OBJECT_LOCATIONCHANGE, GetMessageW, HTTRANSPARENT,
     MA_NOACTIVATE, MSG, PostQuitMessage, SetTimer, TranslateMessage, WM_DESTROY, WM_MOUSEACTIVATE,
-    WM_NCHITTEST, WM_PAINT, WM_TIMER,
+    WM_NCHITTEST, WM_PAINT, WM_TIMER
 };
 use windows::core::{PCWSTR, w};
+use windows::Win32::System::ProcessStatus::EmptyWorkingSet;
+use windows::Win32::System::Threading::GetCurrentProcess;
 
 const WINDOW_CLASS_NAME: PCWSTR = w!("sys-stats");
 
@@ -68,6 +70,10 @@ fn main() {
             0,
         );
 
+        EmptyWorkingSet(GetCurrentProcess()).ok();
+
+        update_window_position();
+
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).into() {
             TranslateMessage(&msg);
@@ -102,13 +108,9 @@ unsafe extern "system" fn wnd_proc(
             }
             WM_NCHITTEST => LRESULT(HTTRANSPARENT as isize),
             WM_PAINT => {
-                let mut ps = Gdi::PAINTSTRUCT::default();
-                Gdi::BeginPaint(hwnd, &mut ps);
-
                 render::draw_window(hwnd);
 
                 Gdi::ValidateRect(Some(hwnd), None);
-                Gdi::EndPaint(hwnd, &ps);
 
                 LRESULT(0)
             }
@@ -135,7 +137,7 @@ fn get_stats_position() -> (i32, i32, i32, i32) {
 
 unsafe fn update_window_position() {
     let position = get_stats_position();
-    
+
     STATS_WINDOW.with(|lock| {
         if let Some(window) = lock.get() {
             window.update_position(position);

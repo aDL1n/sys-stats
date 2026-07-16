@@ -20,23 +20,11 @@ impl CpuWidget {
 }
 
 impl Widget for CpuWidget {
-    fn draw(&self, context: WidgetRenderContext, position: Position, height: u16) {
+    fn draw(&self, context: &WidgetRenderContext, position: Position, height: u16) {
         unsafe {
             let render_target = context.render_target;
             let write_factory = context.write_factory;
             let monitor_store = context.monitor_store;
-
-            let brush = render_target
-                .CreateSolidColorBrush(
-                    &D2D1_COLOR_F {
-                        r: 1.0,
-                        g: 1.0,
-                        b: 1.0,
-                        a: 1.0,
-                    },
-                    None,
-                )
-                .unwrap();
 
             let value = monitor_store.get_monitor::<CpuMonitor>().unwrap().read();
             let value: ByteString = ByteString::from(format!("CPU\n{}%", value as i32));
@@ -59,7 +47,7 @@ impl Widget for CpuWidget {
                 value.get_utf16(),
                 &value_text_format,
                 &rect,
-                &brush,
+                context.text_brush,
                 Direct2D::D2D1_DRAW_TEXT_OPTIONS_NONE,
                 DirectWrite::DWRITE_MEASURING_MODE_NATURAL,
             );

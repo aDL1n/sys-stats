@@ -1,11 +1,8 @@
-use crate::{get_stats_position, wnd_proc};
+use crate::{get_stats_position, update_window_position, wnd_proc};
 use windows::Win32::Foundation::{HINSTANCE, HWND};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Controls::MARGINS;
-use windows::Win32::UI::WindowsAndMessaging::{
-    CS_HREDRAW, CS_VREDRAW, CreateWindowExW, IDC_ARROW, LoadCursorW, RegisterClassExW, SW_HIDE,
-    SW_SHOW, ShowWindow, WNDCLASSEXW,
-};
+use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, LoadCursorW, RegisterClassExW, ShowWindow, CS_HREDRAW, CS_VREDRAW, IDC_ARROW, SW_HIDE, SW_SHOW, WNDCLASSEXW, WS_EX_TOPMOST};
 use windows::core::{PCWSTR, w};
 
 #[derive(Debug)]
@@ -65,8 +62,8 @@ impl TaskbarWindow {
         use windows::Win32::Graphics::Dwm::DwmExtendFrameIntoClientArea;
         use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
         use windows::Win32::UI::WindowsAndMessaging::{
-            WS_CHILD, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
-            WS_VISIBLE, GetWindowThreadProcessId
+            GetWindowThreadProcessId, WS_CHILD, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+            WS_EX_TRANSPARENT, WS_VISIBLE
         };
 
         let window_style = WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_TOPMOST;
