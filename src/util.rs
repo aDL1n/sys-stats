@@ -34,11 +34,11 @@ impl Position {
     }
 }
 
-pub fn rectangle(size: &Size, position: &Position) -> D2D_RECT_F {
+pub fn rectangle(width: u16, height: u16, position: &Position) -> D2D_RECT_F {
     D2D_RECT_F {
         left: position.x as f32,
-        top: (size.height + position.y) as f32,
-        right: (size.width + position.x) as f32,
+        top: (height + position.y) as f32,
+        right: (width + position.x) as f32,
         bottom: position.y as f32,
     }
 }

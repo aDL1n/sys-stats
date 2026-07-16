@@ -1,5 +1,6 @@
 pub mod monitor;
 pub mod render;
+pub mod taskbar;
 mod util;
 pub mod widget;
 pub mod window;
@@ -14,18 +15,17 @@ use crate::window::TaskbarWindow;
 use std::cell::RefCell;
 use std::sync::OnceLock;
 use windows::Win32;
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi;
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
-    DefWindowProcW, DispatchMessageW, EVENT_OBJECT_LOCATIONCHANGE, FindWindowExW, FindWindowW,
-    GetMessageW, GetWindowRect, HTTRANSPARENT, MSG, PostQuitMessage, SetTimer, TranslateMessage,
-    WM_DESTROY, WM_NCHITTEST, WM_PAINT, WM_TIMER,
+    DefWindowProcW, DispatchMessageW, EVENT_OBJECT_LOCATIONCHANGE, GetMessageW, HTTRANSPARENT,
+    MA_NOACTIVATE, MSG, PostQuitMessage, SetTimer, TranslateMessage, WM_DESTROY, WM_MOUSEACTIVATE,
+    WM_NCHITTEST, WM_PAINT, WM_TIMER,
 };
 use windows::core::{PCWSTR, w};
 
-const WINDOW_WIDTH: i32 = 100;
 const WINDOW_CLASS_NAME: PCWSTR = w!("sys-stats");
 
 thread_local! {
@@ -38,7 +38,7 @@ fn main() {
     unsafe {
         CoInitializeEx(None, COINIT_MULTITHREADED).unwrap();
 
-        let taskbar_hwnd = get_taskbar_hwnd();
+        let taskbar_hwnd = taskbar::TASKBAR.with_borrow(|taskbar| taskbar.hwnd());
 
         WIDGET_STORE.with_borrow_mut(|store| {
             store.add_widget(CpuWidget::new());
@@ -88,6 +88,7 @@ unsafe extern "system" fn wnd_proc(
 ) -> LRESULT {
     unsafe {
         match msg {
+            WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
             WM_TIMER => {
                 if wparam.0 == 1 {
                     MONITOR_STORE.with_borrow_mut(|store| {
@@ -120,45 +121,21 @@ unsafe extern "system" fn wnd_proc(
     }
 }
 
-fn get_taskbar_rectangle() -> RECT {
-    use windows::Win32::UI::Shell::{ABM_GETTASKBARPOS, APPBARDATA, SHAppBarMessage};
+fn get_stats_position() -> (i32, i32, i32, i32) {
+    let widgets_width = WIDGET_STORE.with_borrow(|store| store.calculate_width());
+    let (taskbar_rect, tray_rect) =
+        taskbar::TASKBAR.with_borrow(|taskbar| (taskbar.get_rect(), taskbar.tray().get_rect()));
 
-    unsafe {
-        let mut app_bar_data = APPBARDATA {
-            cbSize: size_of::<APPBARDATA>() as u32,
-            ..Default::default()
-        };
-        SHAppBarMessage(ABM_GETTASKBARPOS, &mut app_bar_data);
-        app_bar_data.rc
-    }
-}
+    let window_x = tray_rect.left - widgets_width;
+    let window_y = taskbar_rect.top;
+    let window_height = taskbar_rect.bottom - taskbar_rect.top;
 
-unsafe fn get_taskbar_hwnd() -> HWND {
-    FindWindowW(w!("Shell_TrayWnd"), None).expect("Can't find taskbar window")
-}
-
-unsafe fn get_tray_hwnd(taskbar_hwnd: HWND) -> HWND {
-    FindWindowExW(Some(taskbar_hwnd), None, w!("TrayNotifyWnd"), None)
-        .expect("Can't find tray window")
-}
-
-unsafe fn get_stats_position(window_width: i32) -> (i32, i32, i32) {
-    let taskbar_rectangle = get_taskbar_rectangle();
-    let taskbar_hwnd = get_taskbar_hwnd();
-    let tray_hwnd = get_tray_hwnd(taskbar_hwnd);
-
-    let mut tray_rectangle = RECT::default();
-    GetWindowRect(tray_hwnd, &mut tray_rectangle).expect("Can't get tray rectangle");
-
-    let window_x = tray_rectangle.left - window_width;
-    let window_y = taskbar_rectangle.top;
-    let window_height = taskbar_rectangle.bottom - taskbar_rectangle.top;
-
-    (window_x, window_y, window_height)
+    (window_x, window_y, widgets_width, window_height)
 }
 
 unsafe fn update_window_position() {
-    let position = get_stats_position(WINDOW_WIDTH);
+    let position = get_stats_position();
+    
     STATS_WINDOW.with(|lock| {
         if let Some(window) = lock.get() {
             window.update_position(position);
@@ -179,8 +156,8 @@ unsafe extern "system" fn win_event_proc(
         return;
     }
 
-    let taskbar_hwnd = get_taskbar_hwnd();
-    let tray_hwnd = get_tray_hwnd(taskbar_hwnd);
+    let (taskbar_hwnd, tray_hwnd) =
+        taskbar::TASKBAR.with_borrow(|taskbar| (taskbar.hwnd(), taskbar.tray().hwnd()));
 
     if hwnd == tray_hwnd || hwnd == taskbar_hwnd {
         update_window_position();

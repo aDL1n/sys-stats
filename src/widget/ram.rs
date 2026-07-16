@@ -5,24 +5,22 @@ use crate::widget::{Position, Size, Widget, WidgetRenderContext};
 use windows::Win32::Graphics::Direct2D::Common::{D2D1_COLOR_F, D2D_RECT_F};
 use windows::Win32::Graphics::{Direct2D, DirectWrite};
 use windows::core::w;
+use crate::util;
 
 pub struct RamWidget {
-    size: Size,
+    width: u16,
 }
 
 impl RamWidget {
     pub(crate) fn new() -> Box<Self> {
-        let size = Size {
-            width: 50,
-            height: 30,
-        };
+        let width = 50;
 
-        Box::new(Self { size })
+        Box::new(Self { width })
     }
 }
 
 impl Widget for RamWidget {
-    fn draw(&self, context: WidgetRenderContext, position: Position) {
+    fn draw(&self, context: WidgetRenderContext, position: Position, height: u16) {
         unsafe {
             let render_target = context.render_target;
             let write_factory = context.write_factory;
@@ -55,7 +53,7 @@ impl Widget for RamWidget {
                 )
                 .unwrap();
 
-            let rect= rectangle(&self.size, &position);
+            let rect = util::rectangle(self.width, height, &position);
 
             render_target.DrawText(
                 value.get_utf16(),
@@ -68,16 +66,7 @@ impl Widget for RamWidget {
         }
     }
 
-    fn size(&self) -> &Size {
-        &self.size
-    }
-}
-
-fn rectangle(size: &Size, position: &Position) -> D2D_RECT_F {
-    D2D_RECT_F {
-        left: position.x as f32,
-        top: (size.height + position.y) as f32,
-        right: (size.width + position.x) as f32,
-        bottom: position.y as f32,
+    fn width(&self) -> u16 {
+        self.width
     }
 }

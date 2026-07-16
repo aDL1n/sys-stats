@@ -7,10 +7,11 @@ use windows::Win32::Graphics::DirectWrite::IDWriteFactory;
 pub mod cpu;
 pub mod ram;
 
-pub trait Widget {
-    fn draw(&self, context: WidgetRenderContext, position: Position);
+static WIDTH_OFFSET: i32 = 20;
 
-    fn size(&self) -> &Size;
+pub trait Widget {
+    fn draw(&self, context: WidgetRenderContext, position: Position, height: u16);
+    fn width(&self) -> u16;
 }
 
 pub struct WidgetStore {
@@ -35,9 +36,18 @@ impl WidgetStore {
     pub fn get_widgets(&self) -> &Vec<Box<dyn Widget>> {
         &self.widgets
     }
+
+    pub fn calculate_width(&self) -> i32 {
+        (self
+            .widgets
+            .iter()
+            .map(|widget| widget.width())
+            .sum::<u16>() as i32)
+            + WIDTH_OFFSET
+    }
 }
 
-struct WidgetRenderContext<'a> {
+pub struct WidgetRenderContext<'a> {
     render_target: &'a ID2D1HwndRenderTarget,
     write_factory: &'a IDWriteFactory,
     monitor_store: &'a MonitorStore,
@@ -68,9 +78,9 @@ impl WidgetRenderer {
             };
             let widget_position = Position::new(offset_x, 0);
 
-            widget.draw(widget_context, widget_position);
+            widget.draw(widget_context, widget_position, 30);
 
-            offset_x += widget.size().width + margin;
+            offset_x += widget.width() + margin;
         }
     }
 }

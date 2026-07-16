@@ -1,4 +1,4 @@
-use crate::{WINDOW_WIDTH, get_stats_position, wnd_proc};
+use crate::{get_stats_position, wnd_proc};
 use windows::Win32::Foundation::{HINSTANCE, HWND};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Controls::MARGINS;
@@ -62,26 +62,25 @@ impl TaskbarWindow {
         parent_hwnd: HWND,
         instance: HINSTANCE,
     ) -> windows::core::Result<HWND> {
-        use windows::Win32::Foundation::COLORREF;
         use windows::Win32::Graphics::Dwm::DwmExtendFrameIntoClientArea;
+        use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
         use windows::Win32::UI::WindowsAndMessaging::{
-            LWA_ALPHA, SetLayeredWindowAttributes, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-            WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP, WS_VISIBLE,
+            WS_CHILD, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+            WS_VISIBLE, GetWindowThreadProcessId
         };
 
-        let window_style =
-            WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOPMOST;
+        let window_style = WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_TOPMOST;
 
-        let (window_x, window_y, window_height) = get_stats_position(WINDOW_WIDTH);
+        let (window_x, window_y, window_width, window_height) = get_stats_position();
 
         let hwnd = CreateWindowExW(
             window_style,
             class_name,
             w!("Overlay"),
-            WS_POPUP | WS_VISIBLE,
+            WS_CHILD | WS_VISIBLE,
             window_x,
             window_y,
-            WINDOW_WIDTH,
+            window_width,
             window_height,
             Some(parent_hwnd),
             None,
@@ -89,7 +88,9 @@ impl TaskbarWindow {
             None,
         )?;
 
-        SetLayeredWindowAttributes(hwnd, COLORREF(0), 255, LWA_ALPHA).ok();
+        let taskbar_thread_id = GetWindowThreadProcessId(parent_hwnd, None);
+        let current_thread_id = GetCurrentThreadId();
+        AttachThreadInput(current_thread_id, taskbar_thread_id, false);
 
         let margins = MARGINS {
             cxLeftWidth: -1,
@@ -102,7 +103,7 @@ impl TaskbarWindow {
         Ok(hwnd)
     }
 
-    pub fn update_position(&self, position: (i32, i32, i32)) {
+    pub fn update_position(&self, position: (i32, i32, i32, i32)) {
         use windows::Win32::UI::WindowsAndMessaging::{HWND_TOPMOST, SWP_NOACTIVATE, SetWindowPos};
 
         unsafe {
@@ -111,8 +112,8 @@ impl TaskbarWindow {
                 Some(HWND_TOPMOST),
                 position.0,
                 position.1,
-                WINDOW_WIDTH,
                 position.2,
+                position.3,
                 SWP_NOACTIVATE,
             )
             .expect("Can't change stats window position")

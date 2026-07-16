@@ -1,5 +1,5 @@
-use crate::monitor::cpu::CpuMonitor;
 use crate::monitor::Monitor;
+use crate::monitor::cpu::CpuMonitor;
 use crate::util;
 use crate::util::ByteString;
 use crate::widget::{Position, Size, Widget, WidgetRenderContext};
@@ -8,22 +8,19 @@ use windows::Win32::Graphics::{Direct2D, DirectWrite};
 use windows::core::w;
 
 pub struct CpuWidget {
-    size: Size,
+    width: u16,
 }
 
 impl CpuWidget {
     pub(crate) fn new() -> Box<Self> {
-        let size = Size {
-            width: 30,
-            height: 30,
-        };
+        let width = 30;
 
-        Box::new(Self { size })
+        Box::new(Self { width })
     }
 }
 
 impl Widget for CpuWidget {
-    fn draw(&self, context: WidgetRenderContext, position: Position) {
+    fn draw(&self, context: WidgetRenderContext, position: Position, height: u16) {
         unsafe {
             let render_target = context.render_target;
             let write_factory = context.write_factory;
@@ -56,7 +53,7 @@ impl Widget for CpuWidget {
                 )
                 .unwrap();
 
-            let rect= util::rectangle(&self.size, &position);
+            let rect = util::rectangle(self.width, height, &position);
 
             render_target.DrawText(
                 value.get_utf16(),
@@ -69,9 +66,7 @@ impl Widget for CpuWidget {
         }
     }
 
-    fn size(&self) -> &Size {
-        &self.size
+    fn width(&self) -> u16 {
+        self.width
     }
 }
-
-
