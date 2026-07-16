@@ -2,8 +2,7 @@ use crate::monitor::Monitor;
 use crate::monitor::cpu::CpuMonitor;
 use crate::util;
 use crate::util::ByteString;
-use crate::widget::{Position, Size, Widget, WidgetRenderContext};
-use windows::Win32::Graphics::Direct2D::Common::D2D1_COLOR_F;
+use crate::widget::{Position, Widget, WidgetRenderContext};
 use windows::Win32::Graphics::{Direct2D, DirectWrite};
 use windows::core::w;
 

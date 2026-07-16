@@ -1,11 +1,7 @@
 use crate::{get_stats_position, wnd_proc};
 use windows::Win32::Foundation::{HINSTANCE, HWND};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::Controls::MARGINS;
-use windows::Win32::UI::WindowsAndMessaging::{
-    CS_HREDRAW, CS_VREDRAW, CreateWindowExW, IDC_ARROW, LoadCursorW, RegisterClassExW, SW_HIDE,
-    SW_SHOW, ShowWindow, WNDCLASSEXW, WS_EX_TOPMOST,
-};
+use windows::Win32::UI::WindowsAndMessaging::{CS_HREDRAW, CS_VREDRAW, CreateWindowExW, IDC_ARROW, LoadCursorW, RegisterClassExW, SW_HIDE, SW_SHOW, ShowWindow, WNDCLASSEXW, WS_EX_TOPMOST};
 use windows::core::{PCWSTR, w};
 
 #[derive(Debug)]
@@ -62,15 +58,12 @@ impl TaskbarWindow {
         parent_hwnd: HWND,
         instance: HINSTANCE,
     ) -> windows::core::Result<HWND> {
-        use windows::Win32::Graphics::Dwm::DwmExtendFrameIntoClientArea;
         use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
         use windows::Win32::UI::WindowsAndMessaging::{
-            GetWindowThreadProcessId, WS_CHILD, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
-            WS_EX_TRANSPARENT, WS_VISIBLE,
+            GetWindowThreadProcessId, WS_CHILD, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_VISIBLE,
         };
 
-        let window_style = WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_TOPMOST;
-
+        let window_style = WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
         let (window_x, window_y, window_width, window_height) = get_stats_position();
 
         let hwnd = CreateWindowExW(
@@ -91,14 +84,6 @@ impl TaskbarWindow {
         let taskbar_thread_id = GetWindowThreadProcessId(parent_hwnd, None);
         let current_thread_id = GetCurrentThreadId();
         AttachThreadInput(current_thread_id, taskbar_thread_id, false);
-
-        let margins = MARGINS {
-            cxLeftWidth: -1,
-            cxRightWidth: -1,
-            cyTopHeight: -1,
-            cyBottomHeight: -1,
-        };
-        DwmExtendFrameIntoClientArea(hwnd, &margins).ok();
 
         Ok(hwnd)
     }

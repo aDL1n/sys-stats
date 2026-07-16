@@ -1,6 +1,6 @@
 use crate::monitor::MonitorStore;
-use crate::util::{Position, Size};
-use windows::Win32::Graphics::Direct2D::Common::{D2D_RECT_F, D2D1_COLOR_F};
+use crate::util::Position;
+use windows::Win32::Graphics::Direct2D::Common::D2D1_COLOR_F;
 use windows::Win32::Graphics::Direct2D::{ID2D1HwndRenderTarget, ID2D1SolidColorBrush};
 use windows::Win32::Graphics::DirectWrite::IDWriteFactory;
 

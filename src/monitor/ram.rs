@@ -1,6 +1,6 @@
-use std::any::Any;
-use sysinfo::{CpuRefreshKind, MemoryRefreshKind, RefreshKind, System};
 use crate::monitor::Monitor;
+use std::any::Any;
+use sysinfo::{MemoryRefreshKind, RefreshKind, System};
 
 pub struct RamMonitor {
     system: System,

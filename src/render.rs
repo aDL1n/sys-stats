@@ -1,13 +1,13 @@
 use std::cell::RefCell;
 use std::sync::LazyLock;
 use windows::Win32::Foundation::{HWND, RECT};
-use windows::Win32::Graphics::Direct2D::Common::{
-    D2D_SIZE_U, D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
+use windows::Win32::Graphics::Direct2D::Common::{D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
+                                                 D2D_SIZE_U,
 };
-use windows::Win32::Graphics::Direct2D::{
-    D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_HWND_RENDER_TARGET_PROPERTIES,
-    D2D1_PRESENT_OPTIONS_NONE, D2D1_RENDER_TARGET_PROPERTIES, D2D1CreateFactory, ID2D1Factory,
-    ID2D1HwndRenderTarget,
+use windows::Win32::Graphics::Direct2D::{D2D1CreateFactory,
+                                         D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_HWND_RENDER_TARGET_PROPERTIES,
+                                         D2D1_PRESENT_OPTIONS_NONE, D2D1_RENDER_TARGET_PROPERTIES, ID2D1Factory,
+                                         ID2D1HwndRenderTarget,
 };
 use windows::Win32::Graphics::DirectWrite::{
     DWRITE_FACTORY_TYPE_SHARED, DWriteCreateFactory, IDWriteFactory,
@@ -44,7 +44,12 @@ impl D2DRenderer {
         }
     }
 
-    unsafe fn get_render_target(&mut self, hwnd: HWND, width: u32, height: u32) -> &ID2D1HwndRenderTarget {
+    unsafe fn get_render_target(
+        &mut self,
+        hwnd: HWND,
+        width: u32,
+        height: u32,
+    ) -> &ID2D1HwndRenderTarget {
         if self.render_target.is_none() {
             let props = D2D1_RENDER_TARGET_PROPERTIES {
                 pixelFormat: D2D1_PIXEL_FORMAT {
@@ -67,10 +72,11 @@ impl D2DRenderer {
             self.render_target = Some(target);
         } else {
             let render_target = self.render_target.as_ref().unwrap();
-            let current_size = render_target.GetSize();
 
-            if current_size.width != width as f32 || current_size.height != height as f32 {
-                render_target.Resize(&D2D_SIZE_U { width, height }).ok();
+            let current = render_target.GetPixelSize();
+            if current.width != width || current.height != height {
+                render_target.Resize(&D2D_SIZE_U { width, height })
+                    .expect("Failed to resize window");
             }
         }
 

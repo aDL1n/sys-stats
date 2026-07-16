@@ -23,8 +23,8 @@ use windows::Win32::System::Threading::GetCurrentProcess;
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
     DefWindowProcW, DispatchMessageW, EVENT_OBJECT_LOCATIONCHANGE, GetMessageW, MA_NOACTIVATE, MSG,
-    PostQuitMessage, SetTimer, TranslateMessage, WM_DESTROY, WM_MOUSEACTIVATE, WM_PAINT, WM_TIMER,
-};
+    PostQuitMessage, SetTimer, TranslateMessage, WM_DESTROY,
+    WM_MOUSEACTIVATE, WM_PAINT, WM_TIMER};
 use windows::core::{PCWSTR, w};
 
 const WINDOW_CLASS_NAME: PCWSTR = w!("sys-stats");
@@ -71,6 +71,8 @@ fn main() {
 
         EmptyWorkingSet(GetCurrentProcess()).ok();
 
+        update_window_position();
+
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).into() {
             TranslateMessage(&msg);
@@ -99,21 +101,26 @@ unsafe extern "system" fn wnd_proc(
                     })
                 }
 
-                Gdi::InvalidateRect(Some(hwnd), None, true);
+                Gdi::InvalidateRect(Some(hwnd), None, false);
 
                 LRESULT(0)
             }
             WM_PAINT => {
+                let mut ps = Gdi::PAINTSTRUCT::default();
+                let _hdc = Gdi::BeginPaint(hwnd, &mut ps);
+
                 render::draw_window(hwnd);
 
-                Gdi::ValidateRect(Some(hwnd), None);
+                Gdi::EndPaint(hwnd, &ps);
                 LRESULT(0)
             }
             WM_DESTROY => {
                 PostQuitMessage(0);
                 LRESULT(0)
             }
-            _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+            _ => {
+                DefWindowProcW(hwnd, msg, wparam, lparam)
+            }
         }
     }
 }
