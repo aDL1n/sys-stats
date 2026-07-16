@@ -60,8 +60,7 @@ impl D2DRenderer {
                 presentOptions: D2D1_PRESENT_OPTIONS_NONE,
             };
 
-            let target = self
-                .factory
+            let target = self.factory
                 .CreateHwndRenderTarget(&props, &hwnd_props)
                 .unwrap();
 

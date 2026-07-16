@@ -1,8 +1,11 @@
-use crate::{get_stats_position, update_window_position, wnd_proc};
+use crate::{get_stats_position, wnd_proc};
 use windows::Win32::Foundation::{HINSTANCE, HWND};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Controls::MARGINS;
-use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, LoadCursorW, RegisterClassExW, ShowWindow, CS_HREDRAW, CS_VREDRAW, IDC_ARROW, SW_HIDE, SW_SHOW, WNDCLASSEXW, WS_EX_TOPMOST};
+use windows::Win32::UI::WindowsAndMessaging::{
+    CS_HREDRAW, CS_VREDRAW, CreateWindowExW, IDC_ARROW, LoadCursorW, RegisterClassExW, SW_HIDE,
+    SW_SHOW, ShowWindow, WNDCLASSEXW, WS_EX_TOPMOST,
+};
 use windows::core::{PCWSTR, w};
 
 #[derive(Debug)]
@@ -63,7 +66,7 @@ impl TaskbarWindow {
         use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
         use windows::Win32::UI::WindowsAndMessaging::{
             GetWindowThreadProcessId, WS_CHILD, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
-            WS_EX_TRANSPARENT, WS_VISIBLE
+            WS_EX_TRANSPARENT, WS_VISIBLE,
         };
 
         let window_style = WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_TOPMOST;
@@ -101,12 +104,12 @@ impl TaskbarWindow {
     }
 
     pub fn update_position(&self, position: (i32, i32, i32, i32)) {
-        use windows::Win32::UI::WindowsAndMessaging::{HWND_TOPMOST, SWP_NOACTIVATE, SetWindowPos};
+        use windows::Win32::UI::WindowsAndMessaging::{HWND_TOP, SWP_NOACTIVATE, SetWindowPos};
 
         unsafe {
             SetWindowPos(
                 self.hwnd,
-                Some(HWND_TOPMOST),
+                Some(HWND_TOP),
                 position.0,
                 position.1,
                 position.2,

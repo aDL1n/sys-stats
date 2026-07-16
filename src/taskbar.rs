@@ -1,8 +1,7 @@
 use std::cell::RefCell;
-use std::mem;
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::UI::WindowsAndMessaging::{FindWindowExW, FindWindowW, GetWindowRect};
-use windows::core::{h, w};
+use windows::core::w;
 
 thread_local! {
     pub static TASKBAR: RefCell<Taskbar> = RefCell::new(Taskbar::new())

@@ -18,15 +18,14 @@ use windows::Win32;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi;
 use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx};
-use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent};
-use windows::Win32::UI::WindowsAndMessaging::{
-    DefWindowProcW, DispatchMessageW, EVENT_OBJECT_LOCATIONCHANGE, GetMessageW, HTTRANSPARENT,
-    MA_NOACTIVATE, MSG, PostQuitMessage, SetTimer, TranslateMessage, WM_DESTROY, WM_MOUSEACTIVATE,
-    WM_NCHITTEST, WM_PAINT, WM_TIMER
-};
-use windows::core::{PCWSTR, w};
 use windows::Win32::System::ProcessStatus::EmptyWorkingSet;
 use windows::Win32::System::Threading::GetCurrentProcess;
+use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent};
+use windows::Win32::UI::WindowsAndMessaging::{
+    DefWindowProcW, DispatchMessageW, EVENT_OBJECT_LOCATIONCHANGE, GetMessageW, MA_NOACTIVATE, MSG,
+    PostQuitMessage, SetTimer, TranslateMessage, WM_DESTROY, WM_MOUSEACTIVATE, WM_PAINT, WM_TIMER,
+};
+use windows::core::{PCWSTR, w};
 
 const WINDOW_CLASS_NAME: PCWSTR = w!("sys-stats");
 
@@ -100,16 +99,14 @@ unsafe extern "system" fn wnd_proc(
                     })
                 }
 
-                Gdi::InvalidateRect(Some(hwnd), None, false);
+                Gdi::InvalidateRect(Some(hwnd), None, true);
 
                 LRESULT(0)
             }
-            WM_NCHITTEST => LRESULT(HTTRANSPARENT as isize),
             WM_PAINT => {
                 render::draw_window(hwnd);
 
                 Gdi::ValidateRect(Some(hwnd), None);
-
                 LRESULT(0)
             }
             WM_DESTROY => {
