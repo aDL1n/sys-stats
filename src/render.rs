@@ -44,12 +44,7 @@ impl D2DRenderer {
         }
     }
 
-    unsafe fn get_render_target(
-        &mut self,
-        hwnd: HWND,
-        width: u32,
-        height: u32,
-    ) -> &ID2D1HwndRenderTarget {
+    unsafe fn get_render_target(&mut self, hwnd: HWND, width: u32, height: u32) -> &ID2D1HwndRenderTarget {
         if self.render_target.is_none() {
             let props = D2D1_RENDER_TARGET_PROPERTIES {
                 pixelFormat: D2D1_PIXEL_FORMAT {
@@ -73,7 +68,11 @@ impl D2DRenderer {
             self.render_target = Some(target);
         } else {
             let render_target = self.render_target.as_ref().unwrap();
-            render_target.Resize(&D2D_SIZE_U { width, height }).ok();
+            let current_size = render_target.GetSize();
+
+            if current_size.width != width as f32 || current_size.height != height as f32 {
+                render_target.Resize(&D2D_SIZE_U { width, height }).ok();
+            }
         }
 
         self.render_target.as_ref().unwrap()

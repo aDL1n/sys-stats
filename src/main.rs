@@ -72,8 +72,6 @@ fn main() {
 
         EmptyWorkingSet(GetCurrentProcess()).ok();
 
-        update_window_position();
-
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).into() {
             TranslateMessage(&msg);
@@ -128,8 +126,11 @@ fn get_stats_position() -> (i32, i32, i32, i32) {
     let (taskbar_rect, tray_rect) =
         taskbar::TASKBAR.with_borrow(|taskbar| (taskbar.get_rect(), taskbar.tray().get_rect()));
 
-    let window_x = tray_rect.left - widgets_width;
-    let window_y = taskbar_rect.top;
+    let screen_x = tray_rect.left - widgets_width;
+    let screen_y = taskbar_rect.top;
+
+    let window_x = screen_x - taskbar_rect.left;
+    let window_y = screen_y - taskbar_rect.top;
     let window_height = taskbar_rect.bottom - taskbar_rect.top;
 
     (window_x, window_y, widgets_width, window_height)
