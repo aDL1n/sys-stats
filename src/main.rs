@@ -106,12 +106,10 @@ unsafe extern "system" fn wnd_proc(
                 LRESULT(0)
             }
             WM_PAINT => {
-                let mut ps = Gdi::PAINTSTRUCT::default();
-                let _hdc = Gdi::BeginPaint(hwnd, &mut ps);
-
                 render::draw_window(hwnd);
 
-                Gdi::EndPaint(hwnd, &ps);
+                Gdi::ValidateRect(Some(hwnd), None);
+
                 LRESULT(0)
             }
             WM_DESTROY => {

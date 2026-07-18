@@ -1,13 +1,13 @@
 use std::cell::RefCell;
 use std::sync::LazyLock;
 use windows::Win32::Foundation::{HWND, RECT};
-use windows::Win32::Graphics::Direct2D::Common::{D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
-                                                 D2D_SIZE_U,
+use windows::Win32::Graphics::Direct2D::Common::{
+    D2D_SIZE_U, D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
 };
-use windows::Win32::Graphics::Direct2D::{D2D1CreateFactory,
-                                         D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_HWND_RENDER_TARGET_PROPERTIES,
-                                         D2D1_PRESENT_OPTIONS_NONE, D2D1_RENDER_TARGET_PROPERTIES, ID2D1Factory,
-                                         ID2D1HwndRenderTarget,
+use windows::Win32::Graphics::Direct2D::{
+    D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_HWND_RENDER_TARGET_PROPERTIES,
+    D2D1_PRESENT_OPTIONS_NONE, D2D1_RENDER_TARGET_PROPERTIES, D2D1CreateFactory, ID2D1Factory,
+    ID2D1HwndRenderTarget,
 };
 use windows::Win32::Graphics::DirectWrite::{
     DWRITE_FACTORY_TYPE_SHARED, DWriteCreateFactory, IDWriteFactory,
@@ -65,7 +65,8 @@ impl D2DRenderer {
                 presentOptions: D2D1_PRESENT_OPTIONS_NONE,
             };
 
-            let target = self.factory
+            let target = self
+                .factory
                 .CreateHwndRenderTarget(&props, &hwnd_props)
                 .unwrap();
 
@@ -75,7 +76,8 @@ impl D2DRenderer {
 
             let current = render_target.GetPixelSize();
             if current.width != width || current.height != height {
-                render_target.Resize(&D2D_SIZE_U { width, height })
+                render_target
+                    .Resize(&D2D_SIZE_U { width, height })
                     .expect("Failed to resize window");
             }
         }
