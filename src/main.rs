@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 pub mod monitor;
 pub mod render;
 pub mod taskbar;
