@@ -53,6 +53,7 @@ impl WidgetStore {
 pub struct WidgetRenderContext<'a> {
     render_target: &'a ID2D1HwndRenderTarget,
     monitor_store: &'a MonitorStore,
+    write_factory: &'a IDWriteFactory,
     text_brush: &'a ID2D1SolidColorBrush,
     text_format: &'a IDWriteTextFormat,
 }
@@ -103,6 +104,7 @@ impl WidgetRenderer {
             let widget_context = WidgetRenderContext {
                 render_target,
                 monitor_store,
+                write_factory,
                 text_brush,
                 text_format
             };

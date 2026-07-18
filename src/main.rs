@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 pub mod monitor;
 pub mod render;
@@ -11,7 +11,7 @@ use crate::monitor::MonitorStore;
 use crate::monitor::cpu::CpuMonitor;
 use crate::monitor::ram::RamMonitor;
 use crate::widget::WidgetStore;
-use crate::widget::cpu::CpuWidget;
+use crate::widget::cpu::{CpuWidget, GraphCpuWidget};
 use crate::widget::ram::RamWidget;
 use crate::window::TaskbarWindow;
 use std::cell::RefCell;
@@ -44,6 +44,7 @@ fn main() {
         let taskbar_hwnd = taskbar::TASKBAR.with_borrow(|taskbar| taskbar.hwnd());
 
         WIDGET_STORE.with_borrow_mut(|store| {
+            store.add_widget(GraphCpuWidget::new());
             store.add_widget(CpuWidget::new());
             store.add_widget(RamWidget::new());
         });

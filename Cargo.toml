@@ -17,7 +17,7 @@ windows = {
         "Win32_Graphics_DirectWrite",
         "Win32_Graphics_Direct2D_Common",
         "Win32_Graphics_Dxgi_Common",
-        "Win32_Graphics_Gdi",
+        "Win32_Graphics_Gdi"
     ]
 }
 sysinfo = "0.39"

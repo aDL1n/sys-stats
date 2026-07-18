@@ -52,3 +52,31 @@ pub fn get_text_width(value: &str) -> u16 {
 
     ((max_chars * 9)) as u16
 }
+
+use std::collections::VecDeque;
+
+pub struct BoundedQueue<T> {
+    capacity: usize,
+    storage: VecDeque<T>,
+}
+
+impl<T> BoundedQueue<T> {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            capacity,
+            storage: VecDeque::with_capacity(capacity),
+        }
+    }
+
+    pub fn push(&mut self, item: T) {
+        if self.storage.len() == self.capacity {
+            self.storage.pop_front();
+        }
+        self.storage.push_back(item);
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        self.storage.iter()
+    }
+}
+
