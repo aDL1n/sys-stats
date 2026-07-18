@@ -10,6 +10,7 @@ pub mod cpu;
 pub mod ram;
 
 static WIDTH_OFFSET: i32 = 20;
+static MARGIN: u16 = 10;
 
 pub trait Widget {
     fn draw(&self, context: &WidgetRenderContext, position: Position, height: u16);
@@ -71,7 +72,6 @@ impl WidgetRenderer {
         monitor_store: &MonitorStore,
     ) {
         let mut offset_x = 0;
-        let margin = 10;
 
         unsafe {
             let text_brush = &render_target
@@ -112,7 +112,7 @@ impl WidgetRenderer {
 
                 widget.draw(&widget_context, widget_position, 40);
 
-                offset_x += widget.width() + margin;
+                offset_x += widget.width() + MARGIN;
             }
         }
     }

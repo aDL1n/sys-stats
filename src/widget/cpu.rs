@@ -11,7 +11,7 @@ pub struct CpuWidget {
 
 impl CpuWidget {
     pub(crate) fn new() -> Box<Self> {
-        let width = 30;
+        let width = 35;
 
         Box::new(Self { width })
     }
@@ -26,10 +26,11 @@ impl Widget for CpuWidget {
             let rect = util::rectangle(self.width, height, &position);
 
             let value = monitor_store.get_monitor::<CpuMonitor>().unwrap().read();
-            let value: ByteString = ByteString::from(format!("CPU\n{}%", value as i32));
+            let text_value = format!("CPU\n{}%", value as i32);
+            let text_bytes = ByteString::from(text_value);
 
             render_target.DrawText(
-                value.get_utf16(),
+                text_bytes.get_utf16(),
                 context.text_format,
                 &rect,
                 context.text_brush,

@@ -32,7 +32,7 @@ use windows::core::{PCWSTR, w};
 const WINDOW_CLASS_NAME: PCWSTR = w!("sys-stats");
 
 thread_local! {
-    static STATS_WINDOW: OnceLock<TaskbarWindow> = OnceLock::new();
+    static TASKBAR_WINDOW: OnceLock<TaskbarWindow> = OnceLock::new();
     static MONITOR_STORE: RefCell<MonitorStore> = RefCell::new(MonitorStore::new());
     static WIDGET_STORE: RefCell<WidgetStore> = RefCell::new(WidgetStore::new());
 }
@@ -53,7 +53,7 @@ fn main() {
             store.add_monitor(Box::new(RamMonitor::new()));
         });
 
-        STATS_WINDOW.with(|lock| {
+        TASKBAR_WINDOW.with(|lock| {
             let window = TaskbarWindow::create(taskbar_hwnd, WINDOW_CLASS_NAME)
                 .expect("Can't create window");
             SetTimer(Some(window.hwnd), 1, 500, None);
@@ -143,7 +143,7 @@ fn get_stats_position() -> (i32, i32, i32, i32) {
 unsafe fn update_window_position() {
     let position = get_stats_position();
 
-    STATS_WINDOW.with(|lock| {
+    TASKBAR_WINDOW.with(|lock| {
         if let Some(window) = lock.get() {
             window.update_position(position);
         }

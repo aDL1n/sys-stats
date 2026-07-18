@@ -42,3 +42,13 @@ pub fn rectangle(width: u16, height: u16, position: &Position) -> D2D_RECT_F {
         bottom: position.y as f32,
     }
 }
+
+pub fn get_text_width(value: &str) -> u16 {
+    let max_chars = value
+        .lines()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or(0);
+
+    ((max_chars * 9)) as u16
+}

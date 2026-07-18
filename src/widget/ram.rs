@@ -1,5 +1,4 @@
-#![windows_subsystem = "windows"]
-
+use std::cell::Cell;
 use crate::monitor::Monitor;
 use crate::monitor::ram::RamMonitor;
 use crate::util;
@@ -8,12 +7,12 @@ use crate::widget::{Position, Widget, WidgetRenderContext};
 use windows::Win32::Graphics::{Direct2D, DirectWrite};
 
 pub struct RamWidget {
-    width: u16,
+    width: Cell<u16>,
 }
 
 impl RamWidget {
     pub(crate) fn new() -> Box<Self> {
-        let width = 60;
+        let width = Cell::new(60);
 
         Box::new(Self { width })
     }
@@ -26,12 +25,14 @@ impl Widget for RamWidget {
             let monitor_store = context.monitor_store;
 
             let value = monitor_store.get_monitor::<RamMonitor>().unwrap().read();
-            let value: ByteString = ByteString::from(format!("RAM\n{:.2}GB", value));
+            let value_text = format!("RAM\n{:.2}GB", value);
+            self.width.set(util::get_text_width(&value_text));
 
-            let rect = util::rectangle(self.width, height, &position);
+            let rect = util::rectangle(self.width.get(), height, &position);
 
+            let value_text_bytes: ByteString = ByteString::from(value_text);
             render_target.DrawText(
-                value.get_utf16(),
+                value_text_bytes.get_utf16(),
                 context.text_format,
                 &rect,
                 context.text_brush,
@@ -42,6 +43,6 @@ impl Widget for RamWidget {
     }
 
     fn width(&self) -> u16 {
-        self.width
+        self.width.get()
     }
 }
