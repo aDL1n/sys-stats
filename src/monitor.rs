@@ -7,6 +7,7 @@ pub trait Monitor {
     fn update(&mut self);
 
     fn read(&self) -> f32;
+    fn read_string(&self) -> String;
 
     fn as_any(&self) -> &dyn Any;
 }

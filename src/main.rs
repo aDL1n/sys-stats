@@ -9,7 +9,7 @@ pub mod window;
 
 use crate::monitor::MonitorStore;
 use crate::monitor::cpu::CpuMonitor;
-use crate::monitor::ram::RamMonitor;
+use crate::monitor::ram::{RamMonitor, RamMonitorType};
 use crate::widget::WidgetStore;
 use crate::widget::cpu::{CpuWidget, GraphCpuWidget};
 use crate::widget::ram::RamWidget;
@@ -51,7 +51,7 @@ fn main() {
 
         MONITOR_STORE.with_borrow_mut(|store| {
             store.add_monitor(Box::new(CpuMonitor::new()));
-            store.add_monitor(Box::new(RamMonitor::new()));
+            store.add_monitor(Box::new(RamMonitor::new(RamMonitorType::UsedPercentage)));
         });
 
         TASKBAR_WINDOW.with(|lock| {
@@ -112,6 +112,7 @@ unsafe extern "system" fn wnd_proc(
                 render::draw_window(hwnd);
 
                 Gdi::ValidateRect(Some(hwnd), None);
+                update_window_position();
 
                 LRESULT(0)
             }

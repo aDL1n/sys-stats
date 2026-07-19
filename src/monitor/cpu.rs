@@ -27,6 +27,10 @@ impl Monitor for CpuMonitor {
         self.data
     }
 
+    fn read_string(&self) -> String {
+        format!("{:.0}%", self.data)
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }

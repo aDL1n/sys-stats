@@ -2,30 +2,141 @@ use std::cell::RefCell;
 use std::sync::LazyLock;
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Direct2D::Common::{
-    D2D_SIZE_U, D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
+    D2D_RECT_F, D2D_SIZE_U, D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
 };
 use windows::Win32::Graphics::Direct2D::{
     D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_HWND_RENDER_TARGET_PROPERTIES,
-    D2D1_PRESENT_OPTIONS_NONE, D2D1_RENDER_TARGET_PROPERTIES, D2D1CreateFactory, ID2D1Factory,
-    ID2D1HwndRenderTarget,
+    D2D1_PRESENT_OPTIONS_NONE, D2D1_RENDER_TARGET_PROPERTIES, D2D1CreateFactory, ID2D1Brush,
+    ID2D1Factory, ID2D1HwndRenderTarget,
 };
 use windows::Win32::Graphics::DirectWrite::{
-    DWRITE_FACTORY_TYPE_SHARED, DWriteCreateFactory, IDWriteFactory,
+    DWRITE_FACTORY_TYPE_SHARED, DWriteCreateFactory, IDWriteFactory, IDWriteTextFormat,
 };
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
+use windows::Win32::Graphics::{Direct2D, DirectWrite};
 use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
+use windows::core::w;
 
 use crate::widget::WidgetRenderer;
 use crate::{MONITOR_STORE, WIDGET_STORE};
 
+static CLEAR_COLOR: D2D1_COLOR_F = D2D1_COLOR_F {
+    r: 0.0,
+    g: 0.0,
+    b: 0.0,
+    a: 0.0,
+};
+
 thread_local! {
     static RENDERER: RefCell<D2DRenderer> = RefCell::new(unsafe { D2DRenderer::new() });
+    static TEXT_RENDERER: RefCell<TextRenderer> = RefCell::new(TextRenderer::new());
     static WIDGET_RENDERER: LazyLock<WidgetRenderer> = LazyLock::new(|| WidgetRenderer::new());
+}
+
+pub struct Text {
+    value: String,
+}
+
+impl Text {
+    pub fn from(value: String) -> Text {
+        Text { value }
+    }
+
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+}
+
+pub struct TextRenderer {
+    write_factory: IDWriteFactory,
+    format: IDWriteTextFormat,
+}
+
+impl TextRenderer {
+    fn new() -> Self {
+        unsafe {
+            let write_factory: IDWriteFactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)
+                .expect("Failed to create DirectWrite factory");
+            let format = Self::create_text_format(&write_factory);
+
+            Self {
+                write_factory,
+                format,
+            }
+        }
+    }
+
+    fn create_text_format(write_factory: &IDWriteFactory) -> IDWriteTextFormat {
+        unsafe {
+            let format = write_factory
+                .CreateTextFormat(
+                    w!("Segoe UI"),
+                    None,
+                    DirectWrite::DWRITE_FONT_WEIGHT_NORMAL,
+                    DirectWrite::DWRITE_FONT_STYLE_NORMAL,
+                    DirectWrite::DWRITE_FONT_STRETCH_NORMAL,
+                    13.0,
+                    w!("en-US"),
+                )
+                .unwrap();
+
+            format
+                .SetTextAlignment(DirectWrite::DWRITE_TEXT_ALIGNMENT_CENTER)
+                .unwrap();
+            format
+                .SetParagraphAlignment(DirectWrite::DWRITE_PARAGRAPH_ALIGNMENT_CENTER)
+                .unwrap();
+            format
+                .SetWordWrapping(DirectWrite::DWRITE_WORD_WRAPPING_NO_WRAP)
+                .unwrap();
+
+            format
+        }
+    }
+
+    pub fn get_width(&self, text: &Text) -> u16 {
+        let text_utf16: Vec<u16> = text.value.encode_utf16().collect();
+        if text_utf16.is_empty() {
+            return 0;
+        }
+
+        unsafe {
+            let text_layout = self
+                .write_factory
+                .CreateTextLayout(text_utf16.as_slice(), &self.format, f32::MAX, f32::MAX)
+                .unwrap();
+
+            let mut metrics = std::mem::zeroed();
+            text_layout.GetMetrics(&mut metrics).unwrap();
+
+            metrics.width.ceil() as u16
+        }
+    }
+
+    pub fn draw(
+        &self,
+        render_target: &ID2D1HwndRenderTarget,
+        text: &Text,
+        rect: &D2D_RECT_F,
+        brush: &ID2D1Brush,
+    ) {
+        let text_utf16: Vec<u16> = text.value.encode_utf16().collect();
+
+        unsafe {
+            render_target.DrawText(
+                text_utf16.as_slice(),
+                &self.format,
+                rect,
+                brush,
+                Direct2D::D2D1_DRAW_TEXT_OPTIONS_NONE,
+                DirectWrite::DWRITE_MEASURING_MODE_NATURAL,
+            );
+        }
+    }
 }
 
 struct D2DRenderer {
     factory: ID2D1Factory,
-    write_factory: IDWriteFactory,
     render_target: Option<ID2D1HwndRenderTarget>,
 }
 
@@ -34,12 +145,8 @@ impl D2DRenderer {
         let factory: ID2D1Factory = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, None)
             .expect("Failed to create Direct2D factory");
 
-        let write_factory: IDWriteFactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)
-            .expect("Failed to create DirectWrite factory");
-
         Self {
             factory,
-            write_factory,
             render_target: None,
         }
     }
@@ -69,7 +176,6 @@ impl D2DRenderer {
                 .factory
                 .CreateHwndRenderTarget(&props, &hwnd_props)
                 .unwrap();
-
             self.render_target = Some(target);
         } else {
             let render_target = self.render_target.as_ref().unwrap();
@@ -82,7 +188,7 @@ impl D2DRenderer {
             }
         }
 
-        self.render_target.as_ref().unwrap()
+        &self.render_target.as_ref().unwrap()
     }
 
     fn discard_resources(&mut self) {
@@ -90,47 +196,44 @@ impl D2DRenderer {
     }
 }
 
-pub unsafe fn draw_window(hwnd: HWND) {
-    let mut rect = RECT::default();
-    GetClientRect(hwnd, &mut rect).ok();
+pub fn draw_window(hwnd: HWND) {
+    unsafe {
+        let mut rect = RECT::default();
+        GetClientRect(hwnd, &mut rect).ok();
 
-    let width = (rect.right - rect.left) as u32;
-    let height = (rect.bottom - rect.top) as u32;
+        let width = (rect.right - rect.left) as u32;
+        let height = (rect.bottom - rect.top) as u32;
 
-    if width == 0 || height == 0 {
-        return;
-    }
-
-    RENDERER.with(|renderer| {
-        let mut renderer = renderer.borrow_mut();
-
-        let write_factory = renderer.write_factory.clone();
-        let render_target = renderer.get_render_target(hwnd, width, height);
-
-        render_target.BeginDraw();
-        render_target.Clear(Some(&D2D1_COLOR_F {
-            r: 0.0,
-            g: 0.0,
-            b: 0.0,
-            a: 0.0,
-        }));
-
-        MONITOR_STORE.with_borrow(|monitor_store| {
-            WIDGET_STORE.with_borrow(|widget_store| {
-                WIDGET_RENDERER.with(|renderer| {
-                    renderer.render(
-                        widget_store.get_widgets(),
-                        render_target,
-                        &write_factory,
-                        &monitor_store,
-                    );
-                })
-            });
-        });
-
-        let result = render_target.EndDraw(None, None);
-        if result.is_err() {
-            renderer.discard_resources();
+        if width == 0 || height == 0 {
+            return;
         }
-    });
+
+        RENDERER.with(|renderer| {
+            let mut renderer = renderer.borrow_mut();
+
+            let render_target = renderer.get_render_target(hwnd, width, height);
+            render_target.BeginDraw();
+            render_target.Clear(Some(&CLEAR_COLOR));
+
+            TEXT_RENDERER.with_borrow(|text_renderer| {
+                MONITOR_STORE.with_borrow(|monitor_store| {
+                    WIDGET_STORE.with_borrow(|widget_store| {
+                        WIDGET_RENDERER.with(|widget_renderer| {
+                            widget_renderer.render(
+                                widget_store.get_widgets(),
+                                render_target,
+                                text_renderer,
+                                monitor_store,
+                            );
+                        })
+                    });
+                });
+            });
+
+            let result = render_target.EndDraw(None, None);
+            if result.is_err() {
+                renderer.discard_resources();
+            }
+        });
+    }
 }

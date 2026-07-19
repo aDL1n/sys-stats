@@ -21,3 +21,4 @@ windows = {
     ]
 }
 sysinfo = "0.39"
+windows-numerics = "0.3"
