@@ -14,11 +14,10 @@ use windows::Win32::Graphics::DirectWrite::{
 };
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use windows::Win32::Graphics::{Direct2D, DirectWrite};
-use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
 use windows::core::w;
 
 use crate::widget::WidgetRenderer;
-use crate::{MONITOR_STORE, WIDGET_STORE};
+use crate::{MONITOR_STORE, WIDGET_STORE, util};
 
 static CLEAR_COLOR: D2D1_COLOR_F = D2D1_COLOR_F {
     r: 0.0,
@@ -158,24 +157,7 @@ impl D2DRenderer {
         height: u32,
     ) -> &ID2D1HwndRenderTarget {
         if self.render_target.is_none() {
-            let props = D2D1_RENDER_TARGET_PROPERTIES {
-                pixelFormat: D2D1_PIXEL_FORMAT {
-                    format: DXGI_FORMAT_B8G8R8A8_UNORM,
-                    alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED,
-                },
-                ..Default::default()
-            };
-
-            let hwnd_props = D2D1_HWND_RENDER_TARGET_PROPERTIES {
-                hwnd,
-                pixelSize: D2D_SIZE_U { width, height },
-                presentOptions: D2D1_PRESENT_OPTIONS_NONE,
-            };
-
-            let target = self
-                .factory
-                .CreateHwndRenderTarget(&props, &hwnd_props)
-                .unwrap();
+            let target = self.create_render_target(hwnd, width, height);
             self.render_target = Some(target);
         } else {
             let render_target = self.render_target.as_ref().unwrap();
@@ -191,6 +173,26 @@ impl D2DRenderer {
         &self.render_target.as_ref().unwrap()
     }
 
+    unsafe fn create_render_target(&mut self, hwnd: HWND, width: u32, height: u32) -> ID2D1HwndRenderTarget {
+        let props = D2D1_RENDER_TARGET_PROPERTIES {
+            pixelFormat: D2D1_PIXEL_FORMAT {
+                format: DXGI_FORMAT_B8G8R8A8_UNORM,
+                alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED,
+            },
+            ..Default::default()
+        };
+
+        let hwnd_props = D2D1_HWND_RENDER_TARGET_PROPERTIES {
+            hwnd,
+            pixelSize: D2D_SIZE_U { width, height },
+            presentOptions: D2D1_PRESENT_OPTIONS_NONE,
+        };
+
+        self.factory
+            .CreateHwndRenderTarget(&props, &hwnd_props)
+            .unwrap()
+    }
+
     fn discard_resources(&mut self) {
         self.render_target = None;
     }
@@ -198,8 +200,7 @@ impl D2DRenderer {
 
 pub fn draw_window(hwnd: HWND) {
     unsafe {
-        let mut rect = RECT::default();
-        GetClientRect(hwnd, &mut rect).ok();
+        let rect = util::get_client_rect(hwnd);
 
         let width = (rect.right - rect.left) as u32;
         let height = (rect.bottom - rect.top) as u32;

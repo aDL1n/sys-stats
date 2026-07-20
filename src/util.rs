@@ -1,5 +1,7 @@
 use std::collections::VecDeque;
+use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Direct2D::Common::D2D_RECT_F;
+use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
 
 pub struct Position {
     pub x: u16,
@@ -44,5 +46,12 @@ impl<T> BoundedQueue<T> {
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.storage.iter()
     }
+}
+
+pub unsafe fn get_client_rect(hwnd: HWND) -> RECT {
+    let mut rect = RECT::default();
+    GetClientRect(hwnd, &mut rect).ok();
+    
+    rect
 }
 
