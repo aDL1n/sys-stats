@@ -1,15 +1,37 @@
 pub mod cpu;
 pub mod ram;
+pub mod gpu;
 
 use std::any::Any;
 
 pub trait Monitor {
     fn update(&mut self);
-
-    fn read(&self) -> f32;
-    fn read_string(&self) -> String;
-
     fn as_any(&self) -> &dyn Any;
+}
+
+pub enum MemoryMetricValueKind {
+    COUNT,
+    PERCENT
+}
+
+pub enum MemoryMetricKind {
+    Used,
+    Free
+}
+
+pub trait MemoryMonitor: Monitor {
+    fn read(&self, metric: &MemoryMetricKind, value_kind: &MemoryMetricValueKind) -> String;
+    fn read_raw(&self, metric: &MemoryMetricKind, value_kind: &MemoryMetricValueKind) -> f32;
+}
+
+pub enum HardwareMonitorMetricKind {
+    USAGE,
+    TEMPERATURE,
+}
+
+pub trait HardwareMonitor: Monitor {
+    fn read(&self, metric: &HardwareMonitorMetricKind) -> String;
+    fn read_raw(&self, metric: &HardwareMonitorMetricKind) -> f32;
 }
 
 pub struct MonitorStore {

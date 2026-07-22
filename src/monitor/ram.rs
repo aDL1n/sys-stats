@@ -1,65 +1,91 @@
-use crate::monitor::Monitor;
+use crate::monitor::{MemoryMetricKind, MemoryMonitor, MemoryMetricValueKind, Monitor};
 use std::any::Any;
-use sysinfo::{MemoryRefreshKind, RefreshKind, System};
-
-pub enum RamMonitorType {
-    Available,
-    Used,
-    AvailablePercentage,
-    UsedPercentage,
-}
+use systemstat::Platform;
+use systemstat::platform::PlatformImpl;
 
 pub struct RamMonitor {
-    system: System,
-    monitor_type: RamMonitorType,
+    platform: PlatformImpl,
+    total: u64,
+    used: u64,
+    free: u64,
 }
 
 impl RamMonitor {
-    pub fn new(monitor_type: RamMonitorType) -> Self {
-        let system = System::new_with_specifics(
-            RefreshKind::nothing().with_memory(MemoryRefreshKind::everything()),
-        );
+    pub fn new() -> Self {
+        let platform = PlatformImpl::new();
 
         Self {
-            system,
-            monitor_type,
+            platform,
+            total: 0,
+            used: 0,
+            free: 0,
         }
     }
 
-    fn calculate(&self) -> f32 {
-        let total = (self.system.total_memory() + self.system.total_swap()) as f64;
-        let used = (self.system.used_memory() + self.system.used_swap()) as f64;
-
-        const GB: f64 = 1_073_741_824.0;
-
-        match self.monitor_type {
-            RamMonitorType::Used => (used / GB) as f32,
-            RamMonitorType::Available => ((total - used) / GB) as f32,
-            RamMonitorType::UsedPercentage => ((used / total) * 100.0) as f32,
-            RamMonitorType::AvailablePercentage => (((total - used) / total) * 100.0) as f32,
+    fn calculate_metric(&self, metric: &MemoryMetricKind, value_kind: &MemoryMetricValueKind) -> f32 {
+        match value_kind {
+            MemoryMetricValueKind::COUNT => match metric {
+                MemoryMetricKind::Used => bytes_to_gigabytes(self.used) as f32,
+                MemoryMetricKind::Free => bytes_to_gigabytes(self.free) as f32,
+            },
+            MemoryMetricValueKind::PERCENT => {
+                if self.total == 0 {
+                    return 0.0;
+                }
+                let value = match metric {
+                    MemoryMetricKind::Used => self.used,
+                    MemoryMetricKind::Free => self.free,
+                };
+                (value as f64 / self.total as f64 * 100.0) as f32
+            }
         }
     }
+
 }
 
 impl Monitor for RamMonitor {
     fn update(&mut self) {
-        self.system.refresh_memory();
-    }
-
-    fn read(&self) -> f32 {
-        self.calculate()
-    }
-
-    fn read_string(&self) -> String {
-        let value = self.calculate();
-
-        match self.monitor_type {
-            RamMonitorType::Used | RamMonitorType::Available => format!("{:.2}GB", value),
-            RamMonitorType::UsedPercentage | RamMonitorType::AvailablePercentage => format!("{:.0}%", value),
-        }
+        // let memory = self.platform.memory().unwrap();
+        //
+        // self.total = memory.total.as_u64();
+        // self.used = memory.free.as_u64();
+        // self.free = memory.total.as_u64();
     }
 
     fn as_any(&self) -> &dyn Any {
         self
     }
+}
+
+impl MemoryMonitor for RamMonitor {
+    fn read(&self, metric: &MemoryMetricKind, value_kind: &MemoryMetricValueKind) -> String {
+        match value_kind {
+            MemoryMetricValueKind::COUNT => match metric {
+                MemoryMetricKind::Used | MemoryMetricKind::Free =>
+                    format!("{}GB", self.calculate_metric(metric, value_kind)),
+            }
+            MemoryMetricValueKind::PERCENT => match metric {
+                MemoryMetricKind::Used | MemoryMetricKind::Free =>
+                    format!("{}%", self.calculate_metric(metric, value_kind)),
+            }
+        }
+    }
+
+    fn read_raw(&self, metric: &MemoryMetricKind, value_kind: &MemoryMetricValueKind) -> f32 {
+        match value_kind {
+            MemoryMetricValueKind::COUNT => match metric {
+                MemoryMetricKind::Used | MemoryMetricKind::Free =>
+                    self.calculate_metric(metric, value_kind)
+            }
+            MemoryMetricValueKind::PERCENT => match metric {
+                MemoryMetricKind::Used | MemoryMetricKind::Free =>
+                    self.calculate_metric(metric, value_kind)
+            }
+        }
+    }
+}
+
+fn bytes_to_gigabytes(value: u64) -> u16 {
+    const GB: u64 = 1_073_741_824;
+    (value / GB) as u16
 }

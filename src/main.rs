@@ -7,12 +7,11 @@ mod util;
 pub mod widget;
 pub mod window;
 
-use crate::monitor::MonitorStore;
-use crate::monitor::cpu::CpuMonitor;
-use crate::monitor::ram::{RamMonitor, RamMonitorType};
+use crate::monitor::gpu::GpuMonitor;
+use crate::monitor::{HardwareMonitorMetricKind, MonitorStore};
+use crate::render::WindowRenderer;
 use crate::widget::WidgetStore;
-use crate::widget::cpu::{CpuWidget, GraphCpuWidget};
-use crate::widget::ram::RamWidget;
+use crate::widget::gpu::GpuTextWidget;
 use crate::window::TaskbarWindow;
 use std::cell::RefCell;
 use std::sync::OnceLock;
@@ -25,14 +24,18 @@ use windows::Win32::System::Threading::GetCurrentProcess;
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
     DefWindowProcW, DispatchMessageW, EVENT_OBJECT_LOCATIONCHANGE, GetMessageW, MA_NOACTIVATE, MSG,
-    PostQuitMessage, SetTimer, TranslateMessage, WM_DESTROY,
-    WM_MOUSEACTIVATE, WM_PAINT, WM_TIMER};
+    PostQuitMessage, SetTimer, TranslateMessage, WM_DESTROY, WM_MOUSEACTIVATE, WM_PAINT, WM_TIMER,
+};
 use windows::core::{PCWSTR, w};
+use crate::monitor::cpu::CpuMonitor;
+use crate::monitor::ram::RamMonitor;
+use crate::widget::cpu::{CpuGraphWidget, CpuTextWidget};
 
 const WINDOW_CLASS_NAME: PCWSTR = w!("sys-stats");
 
 thread_local! {
     static TASKBAR_WINDOW: OnceLock<TaskbarWindow> = OnceLock::new();
+    static WINDOW_RENDERER: RefCell<WindowRenderer> = RefCell::new(WindowRenderer::new());
     static MONITOR_STORE: RefCell<MonitorStore> = RefCell::new(MonitorStore::new());
     static WIDGET_STORE: RefCell<WidgetStore> = RefCell::new(WidgetStore::new());
 }
@@ -43,15 +46,24 @@ fn main() {
 
         let taskbar_hwnd = taskbar::TASKBAR.with_borrow(|taskbar| taskbar.hwnd());
 
-        WIDGET_STORE.with_borrow_mut(|store| {
-            store.add_widget(GraphCpuWidget::new());
-            store.add_widget(CpuWidget::new());
-            store.add_widget(RamWidget::new());
-        });
-
         MONITOR_STORE.with_borrow_mut(|store| {
             store.add_monitor(Box::new(CpuMonitor::new()));
-            store.add_monitor(Box::new(RamMonitor::new(RamMonitorType::UsedPercentage)));
+            store.add_monitor(Box::new(RamMonitor::new()));
+            store.add_monitor(Box::new(GpuMonitor::new()));
+        });
+
+        WIDGET_STORE.with_borrow_mut(|store| {
+            let cpu_temperature_widget = CpuTextWidget::new(HardwareMonitorMetricKind::TEMPERATURE);
+            store.add_widget(Box::new(cpu_temperature_widget));
+
+            let cpu_usage_widget = CpuGraphWidget::new(HardwareMonitorMetricKind::USAGE, 50);
+            store.add_widget(Box::new(cpu_usage_widget));
+
+            let gpu_temperature_widget = GpuTextWidget::new(HardwareMonitorMetricKind::TEMPERATURE);
+            store.add_widget(gpu_temperature_widget);
+
+            let gpu_usage_widget = GpuTextWidget::new(HardwareMonitorMetricKind::USAGE);
+            store.add_widget(gpu_usage_widget);
         });
 
         TASKBAR_WINDOW.with(|lock| {
@@ -109,7 +121,7 @@ unsafe extern "system" fn wnd_proc(
                 LRESULT(0)
             }
             WM_PAINT => {
-                render::draw_window(hwnd);
+                WINDOW_RENDERER.with_borrow_mut(|renderer| renderer.render(hwnd));
 
                 Gdi::ValidateRect(Some(hwnd), None);
                 update_window_position();
@@ -120,9 +132,7 @@ unsafe extern "system" fn wnd_proc(
                 PostQuitMessage(0);
                 LRESULT(0)
             }
-            _ => {
-                DefWindowProcW(hwnd, msg, wparam, lparam)
-            }
+            _ => DefWindowProcW(hwnd, msg, wparam, lparam),
         }
     }
 }

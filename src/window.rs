@@ -1,7 +1,10 @@
 use crate::{get_stats_position, wnd_proc};
 use windows::Win32::Foundation::{HINSTANCE, HWND};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::WindowsAndMessaging::{CS_HREDRAW, CS_VREDRAW, CreateWindowExW, IDC_ARROW, LoadCursorW, RegisterClassExW, SW_HIDE, SW_SHOW, ShowWindow, WNDCLASSEXW, WS_EX_TOPMOST};
+use windows::Win32::UI::WindowsAndMessaging::{
+    CS_HREDRAW, CS_VREDRAW, CreateWindowExW, IDC_ARROW, LoadCursorW, RegisterClassExW, SW_HIDE,
+    SW_SHOW, ShowWindow, WNDCLASSEXW, WS_EX_TOPMOST,
+};
 use windows::core::{PCWSTR, w};
 
 #[derive(Debug)]

@@ -1,13 +1,11 @@
-use std::cell::RefCell;
-use std::sync::LazyLock;
-use windows::Win32::Foundation::{HWND, RECT};
+use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct2D::Common::{
     D2D_RECT_F, D2D_SIZE_U, D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT,
 };
 use windows::Win32::Graphics::Direct2D::{
     D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_HWND_RENDER_TARGET_PROPERTIES,
     D2D1_PRESENT_OPTIONS_NONE, D2D1_RENDER_TARGET_PROPERTIES, D2D1CreateFactory, ID2D1Brush,
-    ID2D1Factory, ID2D1HwndRenderTarget,
+    ID2D1Factory, ID2D1HwndRenderTarget, ID2D1SolidColorBrush,
 };
 use windows::Win32::Graphics::DirectWrite::{
     DWRITE_FACTORY_TYPE_SHARED, DWriteCreateFactory, IDWriteFactory, IDWriteTextFormat,
@@ -16,7 +14,9 @@ use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use windows::Win32::Graphics::{Direct2D, DirectWrite};
 use windows::core::w;
 
-use crate::widget::WidgetRenderer;
+use crate::monitor::MonitorStore;
+use crate::util::Position;
+use crate::widget::{WIDGET_MARGIN, Widget};
 use crate::{MONITOR_STORE, WIDGET_STORE, util};
 
 static CLEAR_COLOR: D2D1_COLOR_F = D2D1_COLOR_F {
@@ -25,12 +25,6 @@ static CLEAR_COLOR: D2D1_COLOR_F = D2D1_COLOR_F {
     b: 0.0,
     a: 0.0,
 };
-
-thread_local! {
-    static RENDERER: RefCell<D2DRenderer> = RefCell::new(unsafe { D2DRenderer::new() });
-    static TEXT_RENDERER: RefCell<TextRenderer> = RefCell::new(TextRenderer::new());
-    static WIDGET_RENDERER: LazyLock<WidgetRenderer> = LazyLock::new(|| WidgetRenderer::new());
-}
 
 pub struct Text {
     value: String,
@@ -134,6 +128,26 @@ impl TextRenderer {
     }
 }
 
+#[cfg(test)]
+mod text_renderer_tests {
+    use super::{Text, TextRenderer};
+
+    #[test]
+    fn multiline_width_is_the_width_of_the_widest_line() {
+        let renderer = TextRenderer::new();
+        let first_line = Text::from("CPU".to_owned());
+        let second_line = Text::from("100%".to_owned());
+        let multiline = Text::from("CPU\n100%".to_owned());
+
+        assert_eq!(
+            renderer.get_width(&multiline),
+            renderer
+                .get_width(&first_line)
+                .max(renderer.get_width(&second_line))
+        );
+    }
+}
+
 struct D2DRenderer {
     factory: ID2D1Factory,
     render_target: Option<ID2D1HwndRenderTarget>,
@@ -173,7 +187,12 @@ impl D2DRenderer {
         &self.render_target.as_ref().unwrap()
     }
 
-    unsafe fn create_render_target(&mut self, hwnd: HWND, width: u32, height: u32) -> ID2D1HwndRenderTarget {
+    unsafe fn create_render_target(
+        &mut self,
+        hwnd: HWND,
+        width: u32,
+        height: u32,
+    ) -> ID2D1HwndRenderTarget {
         let props = D2D1_RENDER_TARGET_PROPERTIES {
             pixelFormat: D2D1_PIXEL_FORMAT {
                 format: DXGI_FORMAT_B8G8R8A8_UNORM,
@@ -198,43 +217,110 @@ impl D2DRenderer {
     }
 }
 
-pub fn draw_window(hwnd: HWND) {
-    unsafe {
-        let rect = util::get_client_rect(hwnd);
+pub struct WidgetRenderContext<'a> {
+    pub render_target: &'a ID2D1HwndRenderTarget,
+    pub monitor_store: &'a MonitorStore,
+    pub text_renderer: &'a TextRenderer,
+    pub white_brush: &'a ID2D1SolidColorBrush,
+}
 
-        let width = (rect.right - rect.left) as u32;
-        let height = (rect.bottom - rect.top) as u32;
+pub struct WidgetRenderer {}
 
-        if width == 0 || height == 0 {
-            return;
+impl WidgetRenderer {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub fn render(
+        &self,
+        widgets: &Vec<Box<dyn Widget>>,
+        render_target: &ID2D1HwndRenderTarget,
+        text_renderer: &TextRenderer,
+        monitor_store: &MonitorStore,
+    ) {
+        let mut offset_x = 0;
+
+        unsafe {
+            let white_brush = &render_target
+                .CreateSolidColorBrush(
+                    &D2D1_COLOR_F {
+                        r: 1.0,
+                        g: 1.0,
+                        b: 1.0,
+                        a: 1.0,
+                    },
+                    None,
+                )
+                .unwrap();
+
+            let widget_context = WidgetRenderContext {
+                render_target,
+                monitor_store,
+                text_renderer,
+                white_brush,
+            };
+            for widget in widgets {
+                let widget_position = Position::new(offset_x, 0);
+
+                widget.draw(&widget_context, widget_position, 40);
+
+                offset_x += widget.width() + WIDGET_MARGIN;
+            }
         }
+    }
+}
 
-        RENDERER.with(|renderer| {
-            let mut renderer = renderer.borrow_mut();
+pub struct WindowRenderer {
+    d2d_renderer: D2DRenderer,
+    text_renderer: TextRenderer,
+    widget_renderer: WidgetRenderer,
+}
 
-            let render_target = renderer.get_render_target(hwnd, width, height);
+impl WindowRenderer {
+    pub fn new() -> Self {
+        unsafe {
+            let d2d_renderer = D2DRenderer::new();
+            let text_renderer = TextRenderer::new();
+            let widget_renderer = WidgetRenderer::new();
+
+            Self {
+                d2d_renderer,
+                text_renderer,
+                widget_renderer,
+            }
+        }
+    }
+
+    pub fn render(&mut self, hwnd: HWND) {
+        unsafe {
+            let rect = util::get_client_rect(hwnd);
+
+            let width = (rect.right - rect.left) as u32;
+            let height = (rect.bottom - rect.top) as u32;
+
+            if width == 0 || height == 0 {
+                return;
+            }
+
+            let render_target = self.d2d_renderer.get_render_target(hwnd, width, height);
             render_target.BeginDraw();
             render_target.Clear(Some(&CLEAR_COLOR));
 
-            TEXT_RENDERER.with_borrow(|text_renderer| {
-                MONITOR_STORE.with_borrow(|monitor_store| {
-                    WIDGET_STORE.with_borrow(|widget_store| {
-                        WIDGET_RENDERER.with(|widget_renderer| {
-                            widget_renderer.render(
-                                widget_store.get_widgets(),
-                                render_target,
-                                text_renderer,
-                                monitor_store,
-                            );
-                        })
-                    });
+            MONITOR_STORE.with_borrow(|monitor_store| {
+                WIDGET_STORE.with_borrow(|widget_store| {
+                    self.widget_renderer.render(
+                        widget_store.get_widgets(),
+                        render_target,
+                        &self.text_renderer,
+                        monitor_store,
+                    );
                 });
             });
 
             let result = render_target.EndDraw(None, None);
             if result.is_err() {
-                renderer.discard_resources();
+                self.d2d_renderer.discard_resources();
             }
-        });
+        }
     }
 }

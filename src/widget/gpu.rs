@@ -1,28 +1,28 @@
-use crate::monitor::cpu::CpuMonitor;
+use crate::monitor::gpu::GpuMonitor;
 use crate::monitor::{HardwareMonitor, HardwareMonitorMetricKind};
 use crate::render::WidgetRenderContext;
 use crate::util::Position;
 use crate::widget::{GraphPanel, TextPanel, Widget};
 
-pub struct CpuTextWidget {
+pub struct GpuTextWidget {
     metric: HardwareMonitorMetricKind,
     text_panel: TextPanel
 }
 
-impl CpuTextWidget {
-    pub fn new(metric: HardwareMonitorMetricKind) -> Self {
-        Self {
+impl GpuTextWidget {
+    pub fn new(metric: HardwareMonitorMetricKind) -> Box<Self> {
+        Box::new(Self {
             metric,
             text_panel: TextPanel::new()
-        }
+        })
     }
 }
 
-impl Widget for CpuTextWidget {
+impl Widget for GpuTextWidget {
     fn draw(&self, context: &WidgetRenderContext, position: Position, height: u16) {
-        let monitor = context.monitor_store.get_monitor::<CpuMonitor>()
+        let monitor = context.monitor_store.get_monitor::<GpuMonitor>()
             .unwrap();
-        let value = format!("CPU\n{}", monitor.read(&self.metric));
+        let value = format!("GPU\n{}", monitor.read(&self.metric));
 
         self.text_panel.draw(
             context.render_target,
@@ -39,12 +39,12 @@ impl Widget for CpuTextWidget {
     }
 }
 
-pub struct CpuGraphWidget {
+pub struct GpuGraphWidget {
     metric: HardwareMonitorMetricKind,
     graph_panel: GraphPanel
 }
 
-impl CpuGraphWidget {
+impl GpuGraphWidget {
     pub fn new(metric: HardwareMonitorMetricKind, width: u16) -> Self {
         Self {
             metric,
@@ -53,9 +53,9 @@ impl CpuGraphWidget {
     }
 }
 
-impl Widget for CpuGraphWidget {
+impl Widget for GpuGraphWidget {
     fn draw(&self, context: &WidgetRenderContext, position: Position, height: u16) {
-        let monitor = context.monitor_store.get_monitor::<CpuMonitor>()
+        let monitor = context.monitor_store.get_monitor::<GpuMonitor>()
             .unwrap();
 
         self.graph_panel.draw(
