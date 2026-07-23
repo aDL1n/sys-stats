@@ -51,7 +51,6 @@ impl<T> BoundedQueue<T> {
 pub unsafe fn get_client_rect(hwnd: HWND) -> RECT {
     let mut rect = RECT::default();
     GetClientRect(hwnd, &mut rect).ok();
-    
+
     rect
 }
-

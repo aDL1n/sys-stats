@@ -1,50 +1,58 @@
-use crate::monitor::{HardwareMonitor, HardwareMonitorMetricKind, Monitor};
+use crate::metric::{GpuMetric, MemoryMetric, Metric, MetricKind, MetricSet};
+use crate::monitor::Monitor;
 use all_smi::AllSmi;
-use std::any::Any;
 
 pub struct GpuMonitor {
     smi: AllSmi,
-    usage: f32,
-    temperature: f32,
+    metrics: MetricSet,
 }
 
 impl GpuMonitor {
     pub fn new() -> Self {
-        let smi = AllSmi::new().unwrap();
+        let mut metrics = MetricSet::new();
+        metrics.register(
+            MetricKind::Gpu(GpuMetric::Usage),
+            Metric::new(|value| format!("{value:.0}%")),
+        );
+        metrics.register(
+            MetricKind::Gpu(GpuMetric::Temperature),
+            Metric::new(|value| format!("{value:.0}°")),
+        );
+        metrics.register(
+            MetricKind::Gpu(GpuMetric::Frequency),
+            Metric::new(|value| format!("{value:.0} MHz")),
+        );
 
         Self {
-            smi,
-            usage: 0.0,
-            temperature: 0.0,
+            smi: AllSmi::new().unwrap(),
+            metrics,
         }
+    }
+}
+
+impl Default for GpuMonitor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 impl Monitor for GpuMonitor {
     fn update(&mut self) {
         if let Some(gpu_info) = self.smi.get_gpu_info().first() {
-            self.usage = gpu_info.utilization as f32;
-            self.temperature = gpu_info.temperature as f32;
-        }
-    }
-    
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-impl HardwareMonitor for GpuMonitor {
-    fn read(&self, metric: &HardwareMonitorMetricKind) -> String {
-        match metric {
-            HardwareMonitorMetricKind::USAGE => format!("{:.0}%", self.usage),
-            HardwareMonitorMetricKind::TEMPERATURE => format!("{:.0}°", self.temperature),
+            self.metrics
+                .set_raw_value(MetricKind::Gpu(GpuMetric::Usage), gpu_info.utilization as f32);
+            self.metrics.set_raw_value(
+                MetricKind::Gpu(GpuMetric::Temperature),
+                gpu_info.temperature as f32,
+            );
+            self.metrics.set_raw_value(
+                MetricKind::Gpu(GpuMetric::Frequency),
+                gpu_info.frequency as f32,
+            );
         }
     }
 
-    fn read_raw(&self, metric: &HardwareMonitorMetricKind) -> f32 {
-        match metric {
-            HardwareMonitorMetricKind::USAGE => self.usage,
-            HardwareMonitorMetricKind::TEMPERATURE => self.temperature,
-        }
+    fn metrics(&self) -> &MetricSet {
+        &self.metrics
     }
 }

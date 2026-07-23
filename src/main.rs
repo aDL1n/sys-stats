@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+pub mod metric;
 pub mod monitor;
 pub mod render;
 pub mod taskbar;
@@ -7,11 +8,13 @@ mod util;
 pub mod widget;
 pub mod window;
 
+use crate::metric::{CpuMetric, GpuMetric, MemoryMetric, MetricKind};
+use crate::monitor::MonitorStore;
+use crate::monitor::cpu::CpuMonitor;
 use crate::monitor::gpu::GpuMonitor;
-use crate::monitor::{HardwareMonitorMetricKind, MonitorStore};
+use crate::monitor::ram::RamMonitor;
 use crate::render::WindowRenderer;
-use crate::widget::WidgetStore;
-use crate::widget::gpu::GpuTextWidget;
+use crate::widget::{GraphWidget, TextWidget, WidgetStore};
 use crate::window::TaskbarWindow;
 use std::cell::RefCell;
 use std::sync::OnceLock;
@@ -27,9 +30,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     PostQuitMessage, SetTimer, TranslateMessage, WM_DESTROY, WM_MOUSEACTIVATE, WM_PAINT, WM_TIMER,
 };
 use windows::core::{PCWSTR, w};
-use crate::monitor::cpu::CpuMonitor;
-use crate::monitor::ram::RamMonitor;
-use crate::widget::cpu::{CpuGraphWidget, CpuTextWidget};
+use crate::monitor::vram::VramMonitor;
 
 const WINDOW_CLASS_NAME: PCWSTR = w!("sys-stats");
 
@@ -47,23 +48,28 @@ fn main() {
         let taskbar_hwnd = taskbar::TASKBAR.with_borrow(|taskbar| taskbar.hwnd());
 
         MONITOR_STORE.with_borrow_mut(|store| {
-            store.add_monitor(Box::new(CpuMonitor::new()));
-            store.add_monitor(Box::new(RamMonitor::new()));
-            store.add_monitor(Box::new(GpuMonitor::new()));
+            store.add_monitor(CpuMonitor::new());
+            store.add_monitor(RamMonitor::new());
+            store.add_monitor(GpuMonitor::new());
+            store.add_monitor(VramMonitor::new());
         });
 
         WIDGET_STORE.with_borrow_mut(|store| {
-            let cpu_temperature_widget = CpuTextWidget::new(HardwareMonitorMetricKind::TEMPERATURE);
-            store.add_widget(Box::new(cpu_temperature_widget));
-
-            let cpu_usage_widget = CpuGraphWidget::new(HardwareMonitorMetricKind::USAGE, 50);
-            store.add_widget(Box::new(cpu_usage_widget));
-
-            let gpu_temperature_widget = GpuTextWidget::new(HardwareMonitorMetricKind::TEMPERATURE);
-            store.add_widget(gpu_temperature_widget);
-
-            let gpu_usage_widget = GpuTextWidget::new(HardwareMonitorMetricKind::USAGE);
-            store.add_widget(gpu_usage_widget);
+            store.add_widget(TextWidget::new(
+                "CPU",
+                MetricKind::Cpu(CpuMetric::Frequency),
+            ));
+            store.add_widget(GraphWidget::new(MetricKind::Cpu(CpuMetric::Usage), 50));
+            store.add_widget(TextWidget::new("RAM", MetricKind::Ram(MemoryMetric::Usage)));
+            store.add_widget(TextWidget::new(
+                "GPU",
+                MetricKind::Gpu(GpuMetric::Temperature),
+            ));
+            store.add_widget(GraphWidget::new(MetricKind::Gpu(GpuMetric::Usage), 50));
+            store.add_widget(TextWidget::new(
+                "VRAM",
+                MetricKind::Vram(MemoryMetric::Used),
+            ));
         });
 
         TASKBAR_WINDOW.with(|lock| {
@@ -111,9 +117,12 @@ unsafe extern "system" fn wnd_proc(
             WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
             WM_TIMER => {
                 if wparam.0 == 1 {
-                    MONITOR_STORE.with_borrow_mut(|store| {
-                        store.update_all();
-                    })
+                    MONITOR_STORE.with_borrow_mut(|monitor_store| {
+                        monitor_store.update_all();
+
+                        WIDGET_STORE
+                            .with_borrow_mut(|widget_store| widget_store.update_all(monitor_store));
+                    });
                 }
 
                 Gdi::InvalidateRect(Some(hwnd), None, false);

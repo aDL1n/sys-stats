@@ -213,7 +213,7 @@ impl WidgetRenderer {
 
     pub fn render(
         &self,
-        widgets: &Vec<Box<dyn Widget>>,
+        widgets: &mut [Box<dyn Widget>],
         render_target: &ID2D1HwndRenderTarget,
         text_renderer: &TextRenderer,
         monitor_store: &MonitorStore,
@@ -287,9 +287,9 @@ impl WindowRenderer {
             render_target.Clear(Some(&CLEAR_COLOR));
 
             MONITOR_STORE.with_borrow(|monitor_store| {
-                WIDGET_STORE.with_borrow(|widget_store| {
+                WIDGET_STORE.with_borrow_mut(|widget_store| {
                     self.widget_renderer.render(
-                        widget_store.get_widgets(),
+                        widget_store.widgets_mut(),
                         render_target,
                         &self.text_renderer,
                         monitor_store,

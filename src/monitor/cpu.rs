@@ -1,57 +1,60 @@
-use crate::monitor::{HardwareMonitor, HardwareMonitorMetricKind, Monitor};
-use std::any::Any;
-use sysinfo::{Component, Components, CpuRefreshKind, RefreshKind, System};
+use crate::metric::{CpuMetric, Metric, MetricKind, MetricSet};
+use crate::monitor::Monitor;
+use sysinfo::{Components, CpuRefreshKind, RefreshKind, System};
 
 pub struct CpuMonitor {
     system: System,
-    usage: f32,
-    temperature: f32,
+    metrics: MetricSet,
 }
 
 impl CpuMonitor {
     pub fn new() -> Self {
-        // let system = System::new_with_specifics(
-        //     RefreshKind::nothing().with_cpu(CpuRefreshKind::nothing().with_cpu_usage()),
-        // );
-        let system = System::new_all();
+        let mut metrics = MetricSet::new();
+        metrics.register(
+            MetricKind::Cpu(CpuMetric::Usage),
+            Metric::new(|value| format!("{value:.0}%")),
+        );
+
+        metrics.register(
+            MetricKind::Cpu(CpuMetric::Frequency),
+            Metric::new(|value| format!("{value:.2} GHz")),
+        );
+
         Self {
-            system,
-            usage: 0.0,
-            temperature: 0.0,
+            system: System::new_with_specifics(
+                RefreshKind::nothing().with_cpu(CpuRefreshKind::everything()),
+            ),
+            metrics,
         }
+    }
+}
+
+impl Default for CpuMonitor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 impl Monitor for CpuMonitor {
     fn update(&mut self) {
-        let system = &mut self.system;
-        system.refresh_cpu_usage();
+        self.system.refresh_cpu_all();
 
-        let components = Components::new_with_refreshed_list();
-        for component in components.iter() {
-            println!("{} - {}", component.label(), component.temperature().unwrap_or(0.0));
-        }
+        self.metrics.set_raw_value(
+            MetricKind::Cpu(CpuMetric::Usage),
+            self.system.global_cpu_usage(),
+        );
 
-        self.usage = system.global_cpu_usage();
+        let cpus = self.system.cpus();
+        let frequency = if cpus.is_empty() {
+            0.0
+        } else {
+            (cpus.iter().map(|cpu| cpu.frequency() as f32).sum::<f32>() / cpus.len() as f32) / 1000.0
+        };
+        self.metrics
+            .set_raw_value(MetricKind::Cpu(CpuMetric::Frequency), frequency);
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-impl HardwareMonitor for CpuMonitor {
-    fn read(&self, metric: &HardwareMonitorMetricKind) -> String {
-        match metric {
-            HardwareMonitorMetricKind::USAGE => format!("{:.0}%", self.usage),
-            HardwareMonitorMetricKind::TEMPERATURE => format!("{:.0}°", self.temperature),
-        }
-    }
-
-    fn read_raw(&self, metric: &HardwareMonitorMetricKind) -> f32 {
-        match metric {
-            HardwareMonitorMetricKind::USAGE => self.usage,
-            HardwareMonitorMetricKind::TEMPERATURE => self.temperature,
-        }
+    fn metrics(&self) -> &MetricSet {
+        &self.metrics
     }
 }
