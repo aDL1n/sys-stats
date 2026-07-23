@@ -1,19 +1,21 @@
-use crate::monitor::{HardwareMonitor, HardwareMonitorMetricKind, MemoryMetricKind, Monitor};
+use crate::monitor::{HardwareMonitor, HardwareMonitorMetricKind, Monitor};
 use std::any::Any;
-use systemstat::Platform;
-use systemstat::platform::PlatformImpl;
+use sysinfo::{Component, Components, CpuRefreshKind, RefreshKind, System};
 
 pub struct CpuMonitor {
-    platform: PlatformImpl,
+    system: System,
     usage: f32,
     temperature: f32,
 }
 
 impl CpuMonitor {
     pub fn new() -> Self {
-        let platform = PlatformImpl::new();
+        // let system = System::new_with_specifics(
+        //     RefreshKind::nothing().with_cpu(CpuRefreshKind::nothing().with_cpu_usage()),
+        // );
+        let system = System::new_all();
         Self {
-            platform,
+            system,
             usage: 0.0,
             temperature: 0.0,
         }
@@ -22,8 +24,15 @@ impl CpuMonitor {
 
 impl Monitor for CpuMonitor {
     fn update(&mut self) {
-        // self.usage = self.platform.load_average().unwrap().one;
-        // self.temperature = self.platform.cpu_temp().unwrap();
+        let system = &mut self.system;
+        system.refresh_cpu_usage();
+
+        let components = Components::new_with_refreshed_list();
+        for component in components.iter() {
+            println!("{} - {}", component.label(), component.temperature().unwrap_or(0.0));
+        }
+
+        self.usage = system.global_cpu_usage();
     }
 
     fn as_any(&self) -> &dyn Any {

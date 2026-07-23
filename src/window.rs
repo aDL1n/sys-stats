@@ -12,9 +12,6 @@ pub struct TaskbarWindow {
     pub hwnd: HWND,
 }
 
-unsafe impl Sync for TaskbarWindow {}
-unsafe impl Send for TaskbarWindow {}
-
 impl TaskbarWindow {
     pub fn create(parent_hwnd: HWND, class_name: PCWSTR) -> windows::core::Result<Self> {
         unsafe {

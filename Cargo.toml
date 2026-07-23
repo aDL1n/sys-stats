@@ -22,6 +22,6 @@ windows = {
         "Win32_Graphics_Gdi"
     ]
 }
-systemstat = "0.2"
-all-smi = "0.24.1"
+sysinfo = "0.39"
+all-smi = "0.24"
 windows-numerics = "0.3"

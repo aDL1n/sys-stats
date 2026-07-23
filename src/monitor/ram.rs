@@ -1,10 +1,9 @@
-use crate::monitor::{MemoryMetricKind, MemoryMonitor, MemoryMetricValueKind, Monitor};
+use crate::monitor::{MemoryMetricKind, MemoryMetricValueKind, MemoryMonitor, Monitor};
 use std::any::Any;
-use systemstat::Platform;
-use systemstat::platform::PlatformImpl;
+use sysinfo::{MemoryRefreshKind, RefreshKind, System};
 
 pub struct RamMonitor {
-    platform: PlatformImpl,
+    system: System,
     total: u64,
     used: u64,
     free: u64,
@@ -12,17 +11,23 @@ pub struct RamMonitor {
 
 impl RamMonitor {
     pub fn new() -> Self {
-        let platform = PlatformImpl::new();
+        let system = System::new_with_specifics(
+            RefreshKind::nothing().with_memory(MemoryRefreshKind::everything()),
+        );
 
         Self {
-            platform,
+            system,
             total: 0,
             used: 0,
             free: 0,
         }
     }
 
-    fn calculate_metric(&self, metric: &MemoryMetricKind, value_kind: &MemoryMetricValueKind) -> f32 {
+    fn calculate_metric(
+        &self,
+        metric: &MemoryMetricKind,
+        value_kind: &MemoryMetricValueKind,
+    ) -> f32 {
         match value_kind {
             MemoryMetricValueKind::COUNT => match metric {
                 MemoryMetricKind::Used => bytes_to_gigabytes(self.used) as f32,
@@ -40,16 +45,16 @@ impl RamMonitor {
             }
         }
     }
-
 }
 
 impl Monitor for RamMonitor {
     fn update(&mut self) {
-        // let memory = self.platform.memory().unwrap();
-        //
-        // self.total = memory.total.as_u64();
-        // self.used = memory.free.as_u64();
-        // self.free = memory.total.as_u64();
+        let system = &mut self.system;
+        system.refresh_memory();
+
+        self.total = system.total_memory();
+        self.used = system.used_memory();
+        self.free = system.free_memory();
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -61,26 +66,30 @@ impl MemoryMonitor for RamMonitor {
     fn read(&self, metric: &MemoryMetricKind, value_kind: &MemoryMetricValueKind) -> String {
         match value_kind {
             MemoryMetricValueKind::COUNT => match metric {
-                MemoryMetricKind::Used | MemoryMetricKind::Free =>
-                    format!("{}GB", self.calculate_metric(metric, value_kind)),
-            }
+                MemoryMetricKind::Used | MemoryMetricKind::Free => {
+                    format!("{}GB", self.calculate_metric(metric, value_kind))
+                }
+            },
             MemoryMetricValueKind::PERCENT => match metric {
-                MemoryMetricKind::Used | MemoryMetricKind::Free =>
-                    format!("{}%", self.calculate_metric(metric, value_kind)),
-            }
+                MemoryMetricKind::Used | MemoryMetricKind::Free => {
+                    format!("{}%", self.calculate_metric(metric, value_kind))
+                }
+            },
         }
     }
 
     fn read_raw(&self, metric: &MemoryMetricKind, value_kind: &MemoryMetricValueKind) -> f32 {
         match value_kind {
             MemoryMetricValueKind::COUNT => match metric {
-                MemoryMetricKind::Used | MemoryMetricKind::Free =>
+                MemoryMetricKind::Used | MemoryMetricKind::Free => {
                     self.calculate_metric(metric, value_kind)
-            }
+                }
+            },
             MemoryMetricValueKind::PERCENT => match metric {
-                MemoryMetricKind::Used | MemoryMetricKind::Free =>
+                MemoryMetricKind::Used | MemoryMetricKind::Free => {
                     self.calculate_metric(metric, value_kind)
-            }
+                }
+            },
         }
     }
 }

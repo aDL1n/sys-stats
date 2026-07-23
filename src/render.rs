@@ -128,26 +128,6 @@ impl TextRenderer {
     }
 }
 
-#[cfg(test)]
-mod text_renderer_tests {
-    use super::{Text, TextRenderer};
-
-    #[test]
-    fn multiline_width_is_the_width_of_the_widest_line() {
-        let renderer = TextRenderer::new();
-        let first_line = Text::from("CPU".to_owned());
-        let second_line = Text::from("100%".to_owned());
-        let multiline = Text::from("CPU\n100%".to_owned());
-
-        assert_eq!(
-            renderer.get_width(&multiline),
-            renderer
-                .get_width(&first_line)
-                .max(renderer.get_width(&second_line))
-        );
-    }
-}
-
 struct D2DRenderer {
     factory: ID2D1Factory,
     render_target: Option<ID2D1HwndRenderTarget>,

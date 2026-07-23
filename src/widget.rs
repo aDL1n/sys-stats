@@ -7,6 +7,7 @@ use windows::Win32::Graphics::Direct2D::{ID2D1HwndRenderTarget, ID2D1SolidColorB
 
 pub mod cpu;
 pub mod gpu;
+pub mod ram;
 
 pub const WIDGET_MARGIN: u16 = 10;
 const WINDOW_PADDING: i32 = 0;
